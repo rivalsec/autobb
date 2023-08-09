@@ -1,0 +1,8 @@
+requests
+pyyaml
+dnsgen
+pymongo
+tldextract
+python-nmap
+boto3
+pytest

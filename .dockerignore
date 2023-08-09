@@ -1,0 +1,11 @@
+.vscode/
+nuclei-templates/
+__pycache__/
+.pytest_cache
+venv/
+httprobes/
+tmp/
+tmp_test/
+.DS_Store
+wordlists/
+.git/

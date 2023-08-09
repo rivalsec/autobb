@@ -1,0 +1,17 @@
+.vscode/
+nuclei-templates/
+nuclei-my-templates/
+__pycache__/
+venv/
+config.yaml
+scopes.yaml
+httprobes/
+tmp/
+tmp_test/
+.DS_Store
+test.py
+wordlists/
+.pytest_cache/
+resolvers
+tests/
+subfinder_config.yaml

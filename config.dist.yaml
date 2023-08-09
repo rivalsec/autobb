@@ -1,0 +1,125 @@
+scope:
+  - name: hackerone
+    domains: [hackerone.com]
+  # subs_recon: true # by default 
+  # cidr:
+  #   - 127.0.0.1/32
+
+
+alerts:
+  use: telegram
+  vkteams: #icq https://icq.com/botapi/?lang=en
+    host: ...
+    token: ...
+    chat_id: ...
+    msg_max_size: 1000 #small for file test
+  telegram: #https://core.telegram.org/bots/tutorial
+    token: ...
+    chat_id: ...
+    msg_max_size: 1000 #file caption max 1024!
+
+# APP CONFIG
+juicer_filters:
+  cname: []
+  tls_dns: []
+  title404: []
+  location: []
+
+db:
+  conn_str: 'mongodb://localhost:27017'
+  database: 'autobbdb'
+
+subfinder: 
+  cmd: [
+    'subfinder',
+    # '-config', './subfinder_config.yaml'
+  ]
+
+nuclei:
+  exclude_templates: []
+  cmd: [
+    'nuclei', '-no-color', '-jsonl',
+    #'-t', "./nuclei-my-templates",
+    '-t', './nuclei-templates',
+    '-bulk-size', '50',
+    '-concurrency', '4',
+  ]
+  # nettwork templates on ports without http(s)
+  network_cmd: [
+    'nuclei', '-no-color', '-jsonl',
+    #'-t', "./nuclei-my-templates",
+    '-t', './nuclei-templates',
+    '-tags', 'network', # only network templates
+    '-bulk-size', '50',
+    '-concurrency', '4',
+  ]
+  passive_cmd: [
+    'nuclei', '-no-httpx', '-no-color', '-jsonl', '-passive', 
+    '-c', '3',
+    '-bs', '1',
+    '-t', './nuclei-templates',
+    #'-t', './nuclei-my-templates',
+  ]  
+
+# make suid! #> sudo chown root /home/bb/go/bin/naabu; sudo chmod u+s /home/bb/go/bin/naabu
+naabu:
+  cmd: [
+    'naabu', '-exclude-cdn', '-no-color', '-json',
+    '-exclude-ports', '80,443', #checked with httpx ? remove on ports first
+  ]
+  # top100
+  ports_onnew: >-
+    7,9,13,21-23,25-26,37,53,79-81,88,106,110-111,113,119,135,139,143-144,179,199,389,427,443-445,465,513-515,543-544,548,554,587,631,646,873,990,
+    993,995,1025-1029,1110,1433,1720,1723,1755,1900,2000-2001,2049,2121,2717,3000,3128,3306,3389,3986,4899,5000,5009,5051,5060,5101,5190,5357,5432,
+    5631,5666,5800,5900,6000-6001,6646,7070,8000,8008-8009,8080-8081,8443,8888,9100,9999-10000,32768,49152-49157
+  
+  # top100
+  ports: >- 
+    7,9,13,21-23,25-26,37,53,79-81,88,106,110-111,113,119,135,139,143-144,179,199,389,427,443-445,465,513-515,543-544,548,554,587,631,646,873,990,
+    993,995,1025-1029,1110,1433,1720,1723,1755,1900,2000-2001,2049,2121,2717,3000,3128,3306,3389,3986,4899,5000,5009,5051,5060,5101,5190,5357,5432,
+    5631,5666,5800,5900,6000-6001,6646,7070,8000,8008-8009,8080-8081,8443,8888,9100,9999-10000,32768,49152-49157
+
+httpx:
+  cmd: [
+    'httpx', '-json', '-tech-detect', '-tls-grab', '-follow-host-redirects', '-silent', '-stream',
+    '-deny', '10.0.0.0/8,100.64.0.0/10,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8', #private networks
+  ]
+  threads: 100
+  threads_onnew: 100
+
+wordlist: 'wordlists/subdomains-top1million-110000.txt'
+httprobes_history: 5
+sub_domains_weird_threshold: 7000
+ports_weird_threshold: 30
+nuclei_one_time_max: 1000
+shuffledns:
+  cmd: [
+    'shuffledns', '--silent', '-sw', '-duc', '-r', './resolvers', 
+    '-t', '5000', #10000 default
+  ]
+dnsx:
+  cmd: ['dnsx', '--json', '--silent', '-threads', '5']
+  cmd_ptr: ['dnsx', '--json', '-ptr', '--silent', '-threads', '5']
+dnsgen:
+  wordlen: 2
+  fast: false
+  max: 1000000
+domain_filter:
+  max_sub: 4   # www.eeee.ddd.fff.domain.tld (4)
+  max_len: 50   # minus dot parent length
+fullscan:
+  host_alive_in_days: 7
+  chunk_max: 8000
+  nuclei_cmd: [
+    'nuclei', '-no-color', '-jsonl',
+    #'-t', "./nuclei-my-templates",
+    '-t', './nuclei-templates',
+    '-bulk-size', '50',
+    '-concurrency', '4',
+    #'-severity', 'low,medium,high,critical',
+  ]
+puredns:
+  timeout: 120
+  domains_in_chunk_max: 20
+  rate: 15000
+  rate_trusted: 500
