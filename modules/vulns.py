@@ -66,7 +66,7 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
 def nuclei_check_templates_count(nuclei_res_stderr):
     ''' парсим количество использованных шаблонов Templates loaded for scan: 507 '''
     templates_loaded = None
-    templates_invalid = None
+    templates_invalid = 0
     m = re.search("Templates loaded for current scan: (\d+)", nuclei_res_stderr)
     if m:
         templates_loaded = int(m.group(1))
@@ -74,7 +74,7 @@ def nuclei_check_templates_count(nuclei_res_stderr):
     if m:
         templates_invalid = int(m.group(1))
     
-    if not templates_loaded or templates_loaded < 1000 or templates_invalid > 10:
+    if not templates_loaded or templates_loaded < 500 or templates_invalid > 10:
         er_m = f"Something wrong with nuclei templates? loaded: {templates_loaded}, invalid: {templates_invalid}"
         alerter.notify(er_m)
 
