@@ -171,7 +171,10 @@ def sites_workflow(domains, httpx_threads=1):
     # random order for httpx
     random.shuffle(domains)
     logging.info(f"ищем сайты на {len(domains)} хостах(хост-порт) ({httpx_threads} потоков)")
-    httprobe_res, _ = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
+    if args.passive:
+        httprobe_res, _ = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
+    else:
+        httprobe_res, _ = httprobes(domains, threads=httpx_threads)
 
     #new probes
     up_fields = ["url", "scheme","port","body_sha256","header_sha256","a","cnames","input", "location","title","webserver",
