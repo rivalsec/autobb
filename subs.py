@@ -305,7 +305,6 @@ def main():
     )
 
     old_scopes_subs = []
-    old_scopes_ports = []
     new_scopes_subs = []
     subs_now = []
 
@@ -318,8 +317,7 @@ def main():
             extend_new_only(old_scopes_subs, old_clean_subs, 'host')
         #add cidrs/ips to old
         old_scopes_subs.extend(hosts_from_cidrs_ips(scope))
-        # # add to old previously scaned ports ALWAYS TODO: filter date
-        old_scopes_ports.extend(db['ports'].find({'scope': scope['name']}))
+
         if scope['subs_recon'] == True:
             recon_domains.update(scope['domains'])
         else:
@@ -409,9 +407,6 @@ def main():
 
     #old subdomains
     if args.workflow_olds:
-        #add old ports after args.ports_olds process!
-        old_scopes_subs.extend(old_scopes_ports)
-
         logging.info("Проверяем старые домены (--workflow-olds)")
         sites_workflow(old_scopes_subs, config['httpx']['threads'])
 
