@@ -32,7 +32,7 @@ git clone https://github.com/vortexau/dnsvalidator.git
 docker build -t dnsvalidator ./dnsvalidator
 
 ## run dnsvalidator (add to cron) 
-docker run --rm -v /tmp:/dnsout -t dnsvalidator -threads 20 -o /dnsout/resolvers.txt && mv /tmp/resolvers.txt ./autobb
+docker run --rm -v /tmp:/dnsout -t dnsvalidator -threads 20 -o /dnsout/resolvers.txt && mv /tmp/resolvers.txt ./autobb/resolvers
 
 # run autobb container
 docker run --rm -v $(pwd):/autobb autobb --ports --ports-olds --dns-brute --dns-alts --workflow-olds --nuclei
