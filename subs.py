@@ -12,7 +12,6 @@ import ipaddress
 import traceback
 import time
 from juicy import juicer, http_probes_validators, domain_validators
-from db_bulk import db_get_modified_bulk
 from modules.domain import dnsx, subdomain_isgood, domain_purespray
 from modules.http import httprobes
 from modules.port import portprobes
@@ -52,7 +51,7 @@ def cli_args():
 
 
 def db_get_modified_domains (items, db_collection):
-    return db_get_modified_bulk( items, db_collection, ['host'], ['host','a','a_rev','cname','scope'], compare.domain )
+    return db_get_modified( items, db_collection, ['host'], ['host','a','a_rev','cname','scope'], compare.domain )
 
 
 def db_get_modified(items, db_collection, key_fields, fields, compare_func):
