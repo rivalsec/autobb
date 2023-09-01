@@ -1,6 +1,9 @@
 # autobb
 It's my solution for bugbounty automation
 
+# Fix for "nf_conntrack: table full, dropping packet"
+echo 524288 > /proc/sys/net/netfilter/nf_conntrack_max
+
 # install docker
 sudo apt-get update && sudo apt install -y docker.io
 sudo usermod -aG docker $USER
