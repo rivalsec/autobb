@@ -437,7 +437,7 @@ def main_gc():
     while len(tmp_dirs) > config['httprobes_history']:
         dir_todel = "tmp/" + tmp_dirs.pop(0)
         logging.info(f"Удаляем tmp директорию {dir_todel}")
-        shutil.rmtree(dir_todel)
+        shutil.rmtree(dir_todel, ignore_errors=True)
 
 
 if __name__ == "__main__":
