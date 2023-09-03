@@ -140,6 +140,7 @@ def puredns(domains, rate = 10000, rate_trusted = 500, timeout = 120):
     cmd = ['puredns', 'resolve', in_file, '-q', '-r', './resolvers', 
       '--rate-limit', str(rate),
       '--rate-limit-trusted', str(rate_trusted),
+      '--wildcard-batch', '2000000'
     ]
     cmd.extend(['--write', write_out_file])
     c = 0
@@ -173,7 +174,7 @@ def issub(sub, domain):
     return False
 
 
-def domain_purespray(domains, scopes, old_subs, alts_max, rate=10000, rate_trusted=500, timeout=120) -> List[Dict]:
+def domain_purespray(domains, old_subs, alts_max, rate=10000, rate_trusted=500, timeout=120) -> List[Dict]:
     """
     spray puredns check of random subs an set scope to them, 
     return list of Dict {'host', 'parent_host','scope'??}

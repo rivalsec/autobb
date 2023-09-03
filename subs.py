@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from typing import Dict, List
+from typing import List
 import os
 import random
 import logging
@@ -10,7 +10,6 @@ import compare
 import math
 import ipaddress
 import traceback
-import time
 from juicy import juicer, http_probes_validators, domain_validators
 from modules.domain import dnsx, subdomain_isgood, domain_purespray
 from modules.http import httprobes
@@ -62,10 +61,6 @@ def db_get_modified(items, db_collection, key_fields, fields, compare_func):
     db_collection - mongodb collection,
     compare_fields - fields to find modified items
     """
-    out = []
-    #kostili ) for back comp
-    if not isinstance(key_fields, list):
-        key_fields = [key_fields]
 
     for item in items:
         update_query = { '$set':{'last_alive': datetime.now()}, '$unset': {} }
@@ -80,30 +75,17 @@ def db_get_modified(items, db_collection, key_fields, fields, compare_func):
         for key_field in key_fields:
             find_q[key_field] = item.get(key_field)
 
-        for i in range(5):
-            try:
-                old_item = db_collection.find_one_and_update(find_q, update_query)
-                db_error = None
-                break
-            except Exception as e:
-                logging.error(f"{str(e)} try {i}")
-                db_error = e
-                time.sleep(2)
-        
-        if db_error:
-            raise db_error
+        old_item = db_collection.find_one_and_update(find_q, update_query)
 
         if not old_item:
             insert_item = {}
-            # for key_field in key_fields:
-            #     insert_item = { key_field: item[key_field] } #wtf in fields same
             insert_item['add_date'] = insert_item['last_alive'] = datetime.now()
             for f in fields:
                 if f in item:
                     insert_item[f] = item[f]
-            out.append(item)
             res = db_collection.insert_one(insert_item)
             item['_id'] = res.inserted_id
+            yield item
         else:
             # find changed based on compare_func
             item['_id'] = old_item['_id']
@@ -127,9 +109,7 @@ def db_get_modified(items, db_collection, key_fields, fields, compare_func):
                 comp_res_history = compare_func(item, old_item, True)
                 if not comp_res_history['equal']:
                     item['diffs'] = comp_res['diffs']
-                    out.append(item)
-
-    return out
+                    yield item
 
 
 def small_scopes_slice(items, scopes, max):
@@ -171,15 +151,15 @@ def sites_workflow(domains, httpx_threads=1):
     random.shuffle(domains)
     logging.info(f"ищем сайты на {len(domains)} хостах(хост-порт) ({httpx_threads} потоков)")
     if args.passive:
-        httprobe_res, _ = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
+        httprobe_res = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
     else:
-        httprobe_res, _ = httprobes(domains, threads=httpx_threads)
+        httprobe_res = httprobes(domains, threads=httpx_threads)
 
     #new probes
     up_fields = ["url", "scheme","port","body_sha256","header_sha256","a","cnames","input", "location","title","webserver",
                 "content_type","method","host","content_length","words","lines","chain_status_codes","status_code","tls_grab",
                 "response_time","technologies","final_url",'scope']
-    sites_new = db_get_modified(httprobe_res, db['http_probes'], ['url'], up_fields, compare.http_probe)
+    sites_new = list(db_get_modified(httprobe_res, db['http_probes'], ['url'], up_fields, compare.http_probe))
     #todo filter equal by scope same code,title, content-lenght?, technologies?
     sites_new = sites_equal_filter(sites_new)
 
@@ -189,7 +169,7 @@ def sites_workflow(domains, httpx_threads=1):
         return
 
     juicer(sites_new, http_probes_validators, scopes, config['juicer_filters'])
-    notify_by_weight(sites_new, scopes, "probe(s)", lambda x: f"{x['url']} [{x['status_code']}] [{x.get('title','')}]{x['juicy_info']}", False, True)
+    notify_by_weight(sites_new, "probe(s)", lambda x: f"{x['url']} [{x['status_code']}] [{x.get('title','')}]{x['juicy_info']}")
 
     if not args.nuclei:
         return
@@ -202,7 +182,8 @@ def sites_workflow(domains, httpx_threads=1):
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
     index_fields = ["template-id","matcher-name","matched-at"]
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
-    severity_sort(nuclei_hits)
+    nuclei_hits_new = list(nuclei_hits_new)
+    severity_sort(nuclei_hits_new)
     notify_msg = "\n".join( [ f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits ] )
     alerter.notify(notify_msg)
 
@@ -215,7 +196,7 @@ def passive_workflow(all_http_probes):
         up_fields = ["template-id","info","type","matcher-name","host","port","path","matched-at","meta","extracted-results","scope"]
         index_fields = ["template-id","matcher-name","host"]
         nuclei_hits_new = db_get_modified(passive_results, db['nuclei_passive_hits'], index_fields, up_fields, compare.nuclei_hit)
-
+        nuclei_hits_new = list(nuclei_hits_new)
         severity_sort(nuclei_hits_new)
         notify_msg = f"Passive scan at {glob.httprobes_savedir}:\n"
         notify_msg += "\n".join( [ f'{x["scope"]}: {x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits_new ] )
@@ -236,30 +217,12 @@ def notify_ports(port_probes):
         alerter.notify(msg)
 
 
-def notify_by_weight(items:List, scopes, title_suffix, print_item_func, max_scope_items = 5, show_not_juicy = False):
+def notify_by_weight(items:List, title_suffix, print_item_func):
     """notify on new or modified items, group by scope, sort by scope juicy weight (mute)"""
     items.sort(key=lambda x: x['juicy_weight'], reverse=True)
-    notify_blocks = []
-    for scope_name in [s['name'] for s in scopes]:
-        notify_lines = []
-        scope_subs = [x for x in items if x['scope']==scope_name]
-        scope_subs_len = len(scope_subs)
-        scope_weight = 0
-        for x in scope_subs:
-            if x['juicy_weight'] or show_not_juicy:
-                scope_weight += x['juicy_weight']
-                notify_lines.append("- " + print_item_func(x))
-        if scope_subs_len > 0:
-            scope_msg = notify_block(f"{scope_name}:{scope_weight} +{len(scope_subs)} {title_suffix}.", notify_lines, max_scope_items)
-            #log all lines!
-            logging.info(notify_block(f"{scope_name}:{scope_weight} +{len(scope_subs)} {title_suffix}.", notify_lines))
-            notify_blocks.append( {'msg': scope_msg, 'weight': scope_weight, 'subs_len':scope_subs_len, } )
-
-    # notify_blocks.sort(key=lambda x: x['weight'], reverse=True)
-    notify_blocks.sort(key=lambda x: x['subs_len'])
-    if notify_blocks:
-        notify_msg = "".join( [ x['msg'] for x in notify_blocks ] )
-        alerter.notify(notify_msg)
+    notify_msg = f"+{len(items)} {title_suffix}.\n"
+    notify_msg += "\n".join( [ f"{i['scope']}: {print_item_func(i)}" for i in items ] )
+    alerter.notify(notify_msg)
 
 
 def new_ports_workflow(port_items):
@@ -271,6 +234,7 @@ def new_ports_workflow(port_items):
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
     index_fields = ["template-id","matcher-name","matched-at"]
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
+    nuclei_hits_new = list(nuclei_hits_new)
     severity_sort(nuclei_hits_new)
     notify_msg = "\n".join( [ f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits_new ] )
     alerter.notify(notify_msg)
@@ -339,7 +303,7 @@ def main():
     for i in range(0, allc, chunk_size):
         logging.info(f"Start recon chunk {chi}/{chunks_num} size {chunk_size}")
         chunk = recon_domains[i:i+chunk_size]
-        recon_subs = domain_purespray(chunk, scopes, old_scopes_subs, 
+        recon_subs = domain_purespray(chunk, old_scopes_subs, 
                                    config['dnsgen']['max'],
                                    config['puredns']['rate'],
                                    config['puredns']['rate_trusted'],
@@ -366,7 +330,7 @@ def main():
         
     #remove new from old we are intersecting on changed subs !!!
     logging.info(f"db_get_modified on {len(subs_now)} domains")
-    new_scopes_subs = db_get_modified_domains (subs_now, db['domains'])
+    new_scopes_subs = list(db_get_modified_domains (subs_now, db['domains']))
     old_scopes_subs = list(filter( lambda o: o['host'] not in [n['host'] for n in new_scopes_subs], old_scopes_subs))    
     logging.info(f"{len(new_scopes_subs)} new/changed subdomains found!")
 
@@ -374,16 +338,17 @@ def main():
     if len(new_scopes_subs) > 0:
         juicer(new_scopes_subs, domain_validators, scopes, config['juicer_filters'])
         domains_print_func = lambda x: f"{x['host']} {x.get('a_rev', '')} [{x['juicy_info']}]"
-        notify_by_weight(new_scopes_subs, scopes, "domain(s)", domains_print_func, False, True)
+        notify_by_weight(new_scopes_subs, "domain(s)", domains_print_func)
 
         new_port_probes = []
         if args.ports:
             # otherports
             port_max = small_scopes_slice(new_scopes_subs, scopes, config['nuclei_one_time_max'])
-            port_probes = portprobes(port_max, config['naabu']['ports_onnew'])
+            port_probes = list(portprobes(port_max, config['naabu']['ports_onnew']))
             port_probes, _ = threshold_filter(port_probes, "host", config['ports_weird_threshold'])
             new_port_probes = db_get_modified(port_probes, db['ports'], ['host','port'], ['host','ip','port','scope'], compare.port )
             #new ports only notify
+            new_port_probes = list(new_port_probes)
             notify_ports(new_port_probes)
             # port checks
             new_ports_workflow(new_port_probes)
@@ -398,6 +363,7 @@ def main():
         port_probes = portprobes(old_scopes_subs, config['naabu']['ports'])
         new_port_probes = db_get_modified(port_probes, db['ports'], ['host','port'], ['host','ip','port','scope'], compare.port )
         #new ports notify
+        new_port_probes = list(new_port_probes)
         notify_ports(new_port_probes)
         # port checks
         new_ports_workflow(new_port_probes)
@@ -411,7 +377,7 @@ def main():
 
     #it make sense only after worflow_olds (all new scanned activelly)
     if args.passive:
-        logging.info("nuclei passive on all probes (it make sense only after worflow_olds) ")
+        logging.info("nuclei passive on all probes (it makes sense only after worflow_olds) ")
         #project for collate scope on finded
         q = {"scope": {"$in": list([s["name"] for s in scopes])}}
         project = {"url": 1, "input": 1, "scope": 1}

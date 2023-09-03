@@ -1,5 +1,5 @@
 import logging
-import subprocess
+from subprocess import Popen, PIPE, run, STDOUT
 from config import config, glob, alerter
 import json
 import re
@@ -8,28 +8,36 @@ from typing import Dict, List
 
 
 def nuclei_active(nuclei_cmd_or: List[str], http_probes):
-    # new site fingerpints nuclei scan
-    nuclei_update() #? kostili?
+    nuclei_update()
     nuclei_cmd = nuclei_cmd_or.copy()
     for t in config['nuclei']['exclude_templates']:
         nuclei_cmd.extend(['-et', t])
 
-    nuclei_stdin = "\n".join( [x['url'] for x in http_probes] )
-    logging.info( f"{len(http_probes)} http_probes | " + " ".join(nuclei_cmd))
-    nuclei_res = subprocess.run(nuclei_cmd, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE, input=nuclei_stdin)
-    logging.info(nuclei_res.stderr) #info here
-    #check only on all templates scan
-    if not '-tags' in nuclei_cmd:
-        nuclei_check_templates_count(nuclei_res.stderr)
-    logging.info(nuclei_res.stdout)
-    nuclei_hits = [json.loads(x) for x in nuclei_res.stdout.splitlines()]
-    for p in nuclei_hits:
+    logging.info(" ".join(nuclei_cmd))
+    proc = Popen(nuclei_cmd, text=True, bufsize=1, stderr=PIPE, stdout=PIPE, stdin=PIPE, errors="backslashreplace")
+    
+    incount = 0
+    with proc.stdin as stdin:
+        for d in http_probes:
+            stdin.write(d["url"] + "\n")
+            incount += 1
+    logging.info(f"{incount} items writed to stdin")
+
+    for line in proc.stdout:
+        print(line, end="")
+        p = json.loads(line.strip())
         p_scope = next( (x['scope'] for x in http_probes if x['url'] == p['host']), None )
         # second attempt domain in url
         if not p_scope:
             p_scope = next( (x['scope'] for x in http_probes if p['host'] in x['url']), 'unknown' )
         p['scope'] = p_scope
-    return nuclei_hits
+        yield p
+
+    nuclei_stderr = "".join(proc.stderr.readlines())
+    logging.info(nuclei_stderr) #info here
+    #check only on all templates scan
+    if not '-tags' in nuclei_cmd:
+        nuclei_check_templates_count(nuclei_stderr)
 
 
 def parse_passive_host(file: str):
@@ -50,7 +58,7 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
     for t in config['nuclei']['exclude_templates']:
         nuclei_cmd.extend(['-et', t])
     logging.info(" ".join(nuclei_cmd))
-    nuclei_res = subprocess.run(nuclei_cmd, text=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+    nuclei_res = run(nuclei_cmd, text=True, stderr=PIPE, stdout=PIPE)
     nuclei_check_templates_count(nuclei_res.stderr)
     logging.info(nuclei_res.stderr)
     logging.info(nuclei_res.stdout)
@@ -86,5 +94,5 @@ def nuclei_update():
     logging.info("Обновляем шаблоны nuclei")
     nuclei_templates_dir = f"./nuclei-templates"
     # git clone templates to update https://github.com/projectdiscovery/nuclei-templates.git
-    templ_up_res = subprocess.run(['nuclei', '-ut', '-ud', nuclei_templates_dir ], text=True, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+    templ_up_res = run(['nuclei', '-ut', '-ud', nuclei_templates_dir ], text=True, stderr=STDOUT, stdout=PIPE)
     logging.info(templ_up_res.stdout)
