@@ -157,7 +157,6 @@ def puredns(domains, rate = 10000, rate_trusted = 500, timeout = 120):
             logging.error(res.stderr)
     except subprocess.TimeoutExpired:
         logging.error("Puredns timeout!")
-        return []
     results = file_to_list(write_out_file)
     results = map(str.lower, results)
     # delete in files because of size
