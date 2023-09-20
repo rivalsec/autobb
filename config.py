@@ -13,8 +13,6 @@ def load_scopes():
             scope['domains'] = []
         if not isinstance(scope["domains"], list):
             raise ValueError(f'scope "{scope["name"]}" domains is not a List !!!')
-        if 'wc_filter' not in scope:
-            scope['wc_filter'] = False
         if 'sub_filters' not in scope:
             scope['sub_filters'] = []
         if 'domains_file' in scope:
