@@ -4,6 +4,7 @@ from typing import Dict, List, Any
 import ipaddress
 import collections
 import logging
+import re
 
 
 def file_to_list(file):
@@ -22,16 +23,6 @@ def tsnow():
     %Y%m%d-%H%M
     '''
     return datetime.now().strftime('%Y%m%d-%H%M')
-
-
-def remove_duplicates(obj_l:List[Dict], key):
-    """Remove duplicates in obj_l by key field equal"""
-    out_list = []
-    for obj in obj_l:
-        dup = next( (x for x in out_list if obj[key] == x[key]), None)
-        if not dup:
-            out_list.append(obj)
-    return out_list
 
 
 def extend_new_only(obj_l:List[Dict], add_l:List[Dict], key):
@@ -58,6 +49,9 @@ def domain_inscope(domain:str, scope:Dict[str,Any]):
     for p in scope["domains"]:
         if domain == p:
             return True
+        for refilter in scope["sub_refilters"]:
+            if re.search(refilter, domain):
+                return False
         if scope["subs_recon"] and domain.endswith("." + p):
             return True
     return False
@@ -81,3 +75,8 @@ def threshold_filter(items:Dict[str,Any], item_key:str, threshold:int):
         items = list([x for x in items if x[item_key] != wkey])
 
     return items, filtred
+
+
+def scope_update(arr, scope_name):
+    for item in arr:
+        item['scope'] = scope_name

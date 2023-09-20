@@ -4,6 +4,9 @@ scope:
   # subs_recon: true # by default 
   # cidr:
   #   - 127.0.0.1/32
+  # sub_refilters:
+  #   - \.(stage|dev|test)\.hackerone\.com$
+  #   - \.test\.internal\.hackerone\.com$
 
 
 alerts:

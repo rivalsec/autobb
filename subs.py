@@ -11,11 +11,11 @@ import math
 import ipaddress
 import traceback
 from juicy import juicer, http_probes_validators, domain_validators
-from modules.domain import dnsx, subdomain_isgood, domain_purespray
+from modules.domain import dnsx, domain_purespray
 from modules.http import httprobes
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
-from utils.common import extend_new_only, remove_duplicates, domains_setscope, threshold_filter
+from utils.common import extend_new_only, domains_setscope, threshold_filter, scope_update, domain_inscope
 
 
 def notify_block(title, items:list, lines_num:int = None):
@@ -251,11 +251,6 @@ def hosts_from_cidrs_ips(scope):
     return hosts
 
 
-def scope_update(arr, scope_name):
-    for item in arr:
-        item['scope'] = scope_name
-
-
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -273,11 +268,9 @@ def main():
 
     recon_domains = set()
     for scope in scopes:
-        tmp_scope_subs = remove_duplicates(db['domains'].find({'scope': scope['name']}), 'host')
-        for domain in scope['domains']:
-            #same on dont recon?
-            old_clean_subs = list(filter(lambda d: subdomain_isgood(d['host'], domain), tmp_scope_subs))
-            extend_new_only(old_scopes_subs, old_clean_subs, 'host')
+        tmp_scope_subs = db['domains'].find({'scope': scope['name']})
+        old_clean_subs = list(filter(lambda d: domain_inscope(d['host'], scope), tmp_scope_subs))
+        extend_new_only(old_scopes_subs, old_clean_subs, 'host')
         #add cidrs/ips to old
         old_scopes_subs.extend(hosts_from_cidrs_ips(scope))
 

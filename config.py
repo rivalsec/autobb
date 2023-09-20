@@ -13,8 +13,8 @@ def load_scopes():
             scope['domains'] = []
         if not isinstance(scope["domains"], list):
             raise ValueError(f'scope "{scope["name"]}" domains is not a List !!!')
-        if 'sub_filters' not in scope:
-            scope['sub_filters'] = []
+        if 'sub_refilters' not in scope:
+            scope['sub_refilters'] = []
         if 'domains_file' in scope:
             scope['domains'].extend(file_to_list(scope['domains_file']))
         if 'cidr_file' in scope:
