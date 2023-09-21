@@ -122,7 +122,13 @@ fullscan:
     #'-severity', 'low,medium,high,critical',
   ]
 puredns:
+  cmd: [
+    'puredns', 'resolve', '-q', 
+    '-r', './resolvers',
+    '--resolvers-trusted', './resolvers-trusted',
+    '--rate-limit', '5000',
+    '--rate-limit-trusted', '1000',
+    '--wildcard-batch', '2000000'
+  ]
   timeout: 120
   domains_in_chunk_max: 20
-  rate: 15000
-  rate_trusted: 500

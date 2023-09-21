@@ -131,17 +131,14 @@ def revdns(domains):
             d['a_rev'] = list(ptr)
 
 
-def puredns(domains, rate = 10000, rate_trusted = 500, timeout = 120):
+def puredns(domains, timeout = 120):
     '''
     puredns (resolve + wildcard filter) on input iterable
     '''
     write_out_file = f"{glob.tmp_dir}/purednsout_{str(uuid.uuid4())}"
     in_file = f"{glob.tmp_dir}/purednsin_{str(uuid.uuid4())}"
-    cmd = ['puredns', 'resolve', in_file, '-q', '-r', './resolvers', 
-      '--rate-limit', str(rate),
-      '--rate-limit-trusted', str(rate_trusted),
-      '--wildcard-batch', '2000000'
-    ]
+    cmd = config['puredns']['cmd']
+    cmd.insert(2, in_file)
     cmd.extend(['--write', write_out_file])
     c = 0
     with open(in_file, 'w') as f:
@@ -173,7 +170,7 @@ def issub(sub, domain):
     return False
 
 
-def domain_purespray(domains, old_subs, alts_max, rate=10000, rate_trusted=500, timeout=120) -> List[Dict]:
+def domain_purespray(domains, old_subs, alts_max, wordlist, timeout=120) -> List[Dict]:
     """
     spray puredns check of random subs an set scope to them, 
     return list of Dict {'host', 'parent_host','scope'??}
@@ -182,10 +179,10 @@ def domain_purespray(domains, old_subs, alts_max, rate=10000, rate_trusted=500, 
     for d in domains:
         domain_subs = list(filter(lambda x: subdomain_isgood(x['host'], d), old_subs))
         oldsubs_list = list([ x['host'] for x in domain_subs ])
-        chsubs.extend(subdomains_gen(d,oldsubs_list, config['wordlist'], alts_max=alts_max ))
+        chsubs.extend(subdomains_gen(d,oldsubs_list, wordlist, alts_max=alts_max ))
     #pure subs shuffle !!
     random.shuffle(chsubs)
-    puresubs = puredns(chsubs, rate, rate_trusted, timeout)
+    puresubs = puredns(chsubs, timeout)
     subobjs = []
     for d in [dict(host=x,parent_host="unknown") for x in puresubs]:
         #set parent (for weird calc)

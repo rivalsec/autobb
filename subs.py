@@ -297,9 +297,8 @@ def main():
         logging.info(f"Start recon chunk {chi}/{chunks_num} size {chunk_size}")
         chunk = recon_domains[i:i+chunk_size]
         recon_subs = domain_purespray(chunk, old_scopes_subs, 
-                                   config['dnsgen']['max'],
-                                   config['puredns']['rate'],
-                                   config['puredns']['rate_trusted'],
+                                   config['dnsgen']['max'] if args.dns_alts else 0,
+                                   config['wordlist'] if args.dns_brute else None,
                                    config['puredns']['timeout'],
                                    )
         chi += 1
