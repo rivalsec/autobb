@@ -156,9 +156,9 @@ def sites_workflow(domains, httpx_threads=1):
         httprobe_res = httprobes(domains, threads=httpx_threads)
 
     #new probes
-    up_fields = ["url", "scheme","port","body_sha256","header_sha256","a","cnames","input", "location","title","webserver",
+    up_fields = ["url", "scheme","port","hash","a","cnames","input", "location","title","webserver",
                 "content_type","method","host","content_length","words","lines","chain_status_codes","status_code","tls_grab",
-                "response_time","technologies","final_url",'scope']
+                "time","tech","final_url",'scope']
     sites_new = list(db_get_modified(httprobe_res, db['http_probes'], ['url'], up_fields, compare.http_probe))
     #todo filter equal by scope same code,title, content-lenght?, technologies?
     sites_new = sites_equal_filter(sites_new)
