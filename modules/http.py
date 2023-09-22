@@ -37,8 +37,6 @@ def httprobes(domains:List[str], threads=20, savedir = False):
             for cn in p['cnames']:
                 if len(cn.split('.'))<2:
                     p['cnames'].remove(cn)
-        if 'tls' in p:
-            p['tls_grab'] = p.pop('tls') #tls_grab is renamed to tls %)
         # port obj
         if len(p['input'].split(':')) == 2:
             probe_host, _ = p['input'].split(':')

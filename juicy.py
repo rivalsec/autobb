@@ -16,12 +16,13 @@ def domain_cname_notinscope(domain, scopes, filters, weight = 10):
 
 def probe_cert_notinscope(http_probe, scopes, filters, weight = 10):
     """cert common name is not compare with scope domains"""
-    if 'tls_grab' not in http_probe:
+    if 'tls' not in http_probe:
         return False
     cert_cn = []
     # extension_server_name is not validate domain! don't add it )
-    cert_cn.extend( http_probe['tls_grab'].get('common_name', []) )
-    cert_cn.extend( http_probe['tls_grab'].get('dns_names', []) )
+    if 'subject_cn' in http_probe['tls']:
+        cert_cn.append( re.sub("^\*\.",'', http_probe['tls']['subject_cn']) )
+    cert_cn.extend( [re.sub("^\*\.",'',x) for x in http_probe['tls'].get('subject_an', []) ])
     cert_cn = list(dict.fromkeys(cert_cn)) # remove dupes same order
     for cn in cert_cn:
         scope_parents = next( (s['domains'] for s in scopes if s['name']==http_probe['scope']) )
