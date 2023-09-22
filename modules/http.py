@@ -32,7 +32,8 @@ def httprobes(domains:List[str], threads=20, savedir = False):
         print(line, end="")
         p = json.loads(line.strip())
         #validate cnames
-        if 'cnames' in p:
+        if 'cname' in p:
+            p['cnames'] = p.pop('cname') #cnames renamed to cname %)
             for cn in p['cnames']:
                 if len(cn.split('.'))<2:
                     p['cnames'].remove(cn)
