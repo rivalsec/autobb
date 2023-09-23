@@ -37,6 +37,5 @@ RUN pip install --no-cache-dir --no-cache -r requirements.txt
 
 WORKDIR /autobb
 
-# на маке после скана тупо отваливается внешняя сеть что за Х
 ENTRYPOINT ["python", "subs.py"]
 CMD ["--workflow-olds", "--dns-brute", "--dns-alts", "--ports", "--nuclei", "--ports-olds", "--passive"]

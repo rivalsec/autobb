@@ -150,7 +150,6 @@ def sites_workflow(domains, httpx_threads=1):
     '''
     # random order for httpx
     random.shuffle(domains)
-    logging.info(f"ищем сайты на {len(domains)} хостах(хост-порт) ({httpx_threads} потоков)")
     if args.passive:
         httprobe_res = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
     else:
@@ -164,7 +163,7 @@ def sites_workflow(domains, httpx_threads=1):
     #todo filter equal by scope same code,title, content-lenght?, technologies?
     sites_new = sites_equal_filter(sites_new)
 
-    logging.info(f"нашли {len(sites_new)} новых сайтов")
+    logging.info(f"{len(sites_new)} new http probes found")
 
     if len(sites_new) == 0:
         return
@@ -227,7 +226,6 @@ def notify_by_weight(items:List, title_suffix, print_item_func):
 
 
 def new_ports_workflow(port_items):
-    logging.info(f"ищем язвимости на {len(port_items)} новых портах")
     #non http ports nuclei scan
     for h in port_items:
         h['url'] = f"{h['host']}:{h['port']}"
@@ -365,7 +363,7 @@ def main():
 
     #old subdomains
     if args.workflow_olds:
-        logging.info("Проверяем старые домены (--workflow-olds)")
+        logging.info("Check old subdomains (--workflow-olds)")
         sites_workflow(old_scopes_subs, config['httpx']['threads'])
 
     #it make sense only after worflow_olds (all new scanned activelly)
@@ -387,7 +385,7 @@ def main_gc():
     httprobe_dirs.sort()
     while len(httprobe_dirs) > config['httprobes_history']:
         dir_todel = "httprobes/" + httprobe_dirs.pop(0)
-        logging.info(f"Удаляем директорию с пробами {dir_todel}")
+        logging.info(f"Deleting {dir_todel}")
         shutil.rmtree(dir_todel, ignore_errors=True)
 
     #tmp dir
@@ -395,7 +393,7 @@ def main_gc():
     tmp_dirs.sort()
     while len(tmp_dirs) > config['httprobes_history']:
         dir_todel = "tmp/" + tmp_dirs.pop(0)
-        logging.info(f"Удаляем tmp директорию {dir_todel}")
+        logging.info(f"Deleting {dir_todel}")
         shutil.rmtree(dir_todel, ignore_errors=True)
 
 

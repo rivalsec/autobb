@@ -72,7 +72,7 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
 
 
 def nuclei_check_templates_count(nuclei_res_stderr):
-    ''' парсим количество использованных шаблонов Templates loaded for scan: 507 '''
+    ''' Templates loaded for scan: 507 '''
     templates_loaded = None
     templates_invalid = 0
     m = re.search("Templates loaded for current scan: (\d+)", nuclei_res_stderr)
@@ -91,7 +91,7 @@ def nuclei_check_templates_count(nuclei_res_stderr):
 
 
 def nuclei_update():
-    logging.info("Обновляем шаблоны nuclei")
+    logging.info("Updating nuclei tempates")
     nuclei_templates_dir = f"./nuclei-templates"
     # git clone templates to update https://github.com/projectdiscovery/nuclei-templates.git
     templ_up_res = run(['nuclei', '-ut', '-ud', nuclei_templates_dir ], text=True, stderr=STDOUT, stdout=PIPE)

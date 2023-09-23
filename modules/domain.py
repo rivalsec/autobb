@@ -60,9 +60,8 @@ def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordl
 
     # 1) get all from subfinder
     subs = set()
-    logging.info(f"{domain} ищем сабдомены subfinder...")
     subs.update(filter(subf, subfinder(domain)))
-    logging.info(f"{domain} subfinder {len(subs)} шт.")
+    logging.info(f"{domain} +{len(subs)} subfinder")
 
     subs.add(domain)
     #already reconed subdomains from database
@@ -71,7 +70,7 @@ def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordl
     if wordlist:
         # 2) brute subs
         subs_brute = set(filter(subf, brute_subs(domain, wordlist)))
-        logging.info(f"{domain} сгенерировали {len(subs_brute)} шт. с помощью {wordlist}")
+        logging.info(f"{domain} +{len(subs_brute)} from {wordlist}")
         subs.update(subs_brute)
 
     # make alts from old subs
@@ -79,10 +78,10 @@ def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordl
         random.shuffle(oldsubs)
         subs_alts_gen = dnsgen.generate(oldsubs, wordlen=alts_wordlen, fast=False)
         subs_alts = set(itertools.islice(filter(subf, subs_alts_gen), alts_max))
-        logging.info(f"{domain} сгенерировали из {len(oldsubs)} живых {len(subs_alts)} алтернативных (dnsgen wordlen={alts_wordlen} fast=False)")
+        logging.info(f"{domain} +{len(subs_alts)} alt subdomains from {len(oldsubs)} old ones (dnsgen wordlen={alts_wordlen} fast=False)")
         subs.update(subs_alts)
 
-    logging.info(f"{domain} итого сгенерили {len(subs)} сабов")
+    logging.info(f"{domain} {len(subs)} in total subdomains to check")
     return subs
 
 
