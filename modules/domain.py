@@ -100,7 +100,7 @@ def shuffledns(domains, domain):
 
 
 def dnsx(domains):
-    cmd = config['dnsx']['cmd']
+    cmd = config['dnsx']['cmd'].copy()
     stdin_text = "\n".join(domains)+'\n'
     logging.info(f"{len(domains)} domains | " + ' '.join(cmd))
     res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, input=stdin_text, text=True)
@@ -112,7 +112,7 @@ def dnsx(domains):
 
 def revdns(domains):
     """ add ptr from a to each domain in list"""
-    cmd = config['dnsx']['cmd_ptr']
+    cmd = config['dnsx']['cmd_ptr'].copy()
     d_ips = set()
     for d in domains:
         for a in d['a']:
@@ -137,7 +137,7 @@ def puredns(domains, timeout = 120):
     '''
     write_out_file = f"{glob.tmp_dir}/purednsout_{str(uuid.uuid4())}"
     in_file = f"{glob.tmp_dir}/purednsin_{str(uuid.uuid4())}"
-    cmd = config['puredns']['cmd']
+    cmd = config['puredns']['cmd'].copy()
     cmd.insert(2, in_file)
     cmd.extend(['--write', write_out_file])
     c = 0
