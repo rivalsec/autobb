@@ -322,7 +322,8 @@ def main():
     #remove new from old we are intersecting on changed subs !!!
     logging.info(f"db_get_modified on {len(subs_now)} domains")
     new_scopes_subs = list(db_get_modified_domains (subs_now, db['domains']))
-    old_scopes_subs = list(filter( lambda o: o['host'] not in [n['host'] for n in new_scopes_subs], old_scopes_subs))    
+    new_hosts = set([n['host'] for n in new_scopes_subs])
+    old_scopes_subs = list(filter( lambda o: o['host'] not in new_hosts, old_scopes_subs))    
     logging.info(f"{len(new_scopes_subs)} new/changed subdomains found!")
 
     # new and modified subdomains
