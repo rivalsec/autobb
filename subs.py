@@ -268,8 +268,9 @@ def main():
 
     recon_domains = set()
     for scope in scopes:
+        logging.info(f"Collect {scope['name']}'s subdomains")
         tmp_scope_subs = db['domains'].find({'scope': scope['name']})
-        old_clean_subs = list(filter(lambda d: domain_inscope(d['host'], scope), tmp_scope_subs))
+        old_clean_subs = filter(lambda d: domain_inscope(d['host'], scope), tmp_scope_subs)
         extend_new_only(old_scopes_subs, old_clean_subs, 'host')
         #add cidrs/ips to old
         old_scopes_subs.extend(hosts_from_cidrs_ips(scope))
