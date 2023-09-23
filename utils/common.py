@@ -11,10 +11,17 @@ def file_to_list(file):
     fl = []
     if os.path.exists(file):
         with open(file, 'r') as f:
-            for l in f.readlines():
+            for l in f:
                 fl.append(l.rstrip())
-    # return sorted(fl)
     return fl
+
+
+def file_lines_count(file):
+    c = 0
+    with open(file, 'r') as f:
+        for l in f:
+            c += 1
+    return c
 
 
 def tsnow():

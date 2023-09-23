@@ -131,4 +131,4 @@ puredns:
     '--wildcard-batch', '2000000'
   ]
   timeout: 120
-  domains_in_chunk_max: 20
+  chunk_vol_max: 4000000

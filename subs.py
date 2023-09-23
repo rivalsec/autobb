@@ -16,7 +16,7 @@ from modules.http import httprobes
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
-from utils.common import uniq_list
+from utils.common import uniq_list, file_lines_count
 
 
 def notify_block(title, items:list, lines_num:int = None):
@@ -250,6 +250,19 @@ def hosts_from_cidrs_ips(scope):
     return hosts
 
 
+def chunk_size_calc(recon_domains_count: int):
+    wlc = file_lines_count(config['wordlist']) if args.dns_brute else 0
+    dnsgenc = config['dnsgen']['max'] if args.dns_alts else 0
+    subs_on_one = wlc + dnsgenc + 1000
+    all_count = subs_on_one * recon_domains_count
+    chunks_num_min = math.ceil(all_count / config['puredns']['chunk_vol_max'])
+    chunk_size = math.floor(recon_domains_count / chunks_num_min)
+    if chunk_size == 0:
+        chunk_size = 1
+    chunks_num = math.ceil(recon_domains_count / chunk_size)
+    return chunks_num, chunk_size
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -288,9 +301,7 @@ def main():
     recon_domains = list(recon_domains)
     random.shuffle(recon_domains)
     allc = len(recon_domains)
-    chunks_num = math.ceil(allc / config['puredns']['domains_in_chunk_max'])
-    chunk_size = math.ceil(allc / chunks_num)     # medium chunk size
-
+    chunks_num, chunk_size = chunk_size_calc(allc)
     chi = 1
     for i in range(0, allc, chunk_size):
         logging.info(f"Start recon chunk {chi}/{chunks_num} size {chunk_size}")
@@ -301,7 +312,6 @@ def main():
                                    config['puredns']['timeout'],
                                    )
         chi += 1
-        # weird counter for each parent domain on each chunk!
         logging.info(f"checking for subdomains weird results")
         recon_subs, _ = threshold_filter(recon_subs, "parent_host", config['sub_domains_weird_threshold'])
         #TODO: shuffledns on filtered
