@@ -15,7 +15,8 @@ from modules.domain import dnsx, domain_purespray
 from modules.http import httprobes
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
-from utils.common import extend_new_only, domains_setscope, threshold_filter, scope_update, domain_inscope
+from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
+from utils.common import uniq_list
 
 
 def notify_block(title, items:list, lines_num:int = None):
@@ -262,16 +263,15 @@ def main():
         ]
     )
 
-    old_scopes_subs = []
-    new_scopes_subs = []
-    subs_now = []
+    old_scopes_subs = uniq_list('host')
+    subs_now = uniq_list('host')
 
     recon_domains = set()
     for scope in scopes:
         logging.info(f"Collect {scope['name']}'s subdomains")
         tmp_scope_subs = db['domains'].find({'scope': scope['name']})
         old_clean_subs = filter(lambda d: domain_inscope(d['host'], scope), tmp_scope_subs)
-        extend_new_only(old_scopes_subs, old_clean_subs, 'host')
+        old_scopes_subs.extend(old_clean_subs)
         #add cidrs/ips to old
         old_scopes_subs.extend(hosts_from_cidrs_ips(scope))
 
@@ -282,7 +282,7 @@ def main():
             logging.info(f"No recon scope {scope['name']} resolve all domains at once...")
             scope_subs_now = dnsx(scope['domains'])
             scope_update(scope_subs_now, scope['name'])
-            extend_new_only(subs_now, scope_subs_now, 'host')
+            subs_now.extend(scope_subs_now)
             logging.info(f"{scope['name']} {len(scope_subs_now)} resolved domains")
 
     #process recon domains
@@ -319,7 +319,7 @@ def main():
                 logging.info(str(d))
                 recon_subs.remove(d)
         #TODO: db inplace ?
-        extend_new_only(subs_now, recon_subs, 'host')
+        subs_now.extend(recon_subs)
         
     #remove new from old we are intersecting on changed subs !!!
     logging.info(f"db_get_modified on {len(subs_now)} domains")

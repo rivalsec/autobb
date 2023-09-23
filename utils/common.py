@@ -25,13 +25,6 @@ def tsnow():
     return datetime.now().strftime('%Y%m%d-%H%M')
 
 
-def extend_new_only(obj_l:List[Dict], add_l:List[Dict], key):
-    """add in obj_l only new objects by key field"""
-    for new_obj in add_l:
-        if not next( (x for x in obj_l if x[key] == new_obj[key]) ,False):
-            obj_l.append(new_obj)
-
-
 def is_private_ip(ip):
     ipobj = ipaddress.IPv4Address(ip)
     if ipobj in ipaddress.IPv4Network('10.0.0.0/8'):
@@ -80,3 +73,25 @@ def threshold_filter(items:Dict[str,Any], item_key:str, threshold:int):
 def scope_update(arr, scope_name):
     for item in arr:
         item['scope'] = scope_name
+
+
+class uniq_list(list):
+
+    def __init__(self, key:str) -> None:
+        self._key = key
+        self._seenkees = set()
+
+    def extend(self, inl):
+        for obj in inl:
+            if self._isuniq(obj):
+                super().append(obj)
+
+    def append(self, obj) -> None:
+        if self._isuniq(obj):
+            super().append(obj)
+
+    def _isuniq(self, obj):
+        iv = obj[self._key]
+        if iv not in self._seenkees:
+            self._seenkees.add(iv)
+            return True
