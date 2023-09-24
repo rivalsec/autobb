@@ -16,7 +16,7 @@ from modules.http import httprobes
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
-from utils.common import uniq_list, file_lines_count
+from utils.common import uniq_list, file_lines_count, hit_tostr
 
 
 def notify_block(title, items:list, lines_num:int = None):
@@ -184,7 +184,7 @@ def sites_workflow(domains, httpx_threads=1):
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
     nuclei_hits_new = list(nuclei_hits_new)
     severity_sort(nuclei_hits_new)
-    notify_msg = "\n".join( [ f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits_new ] )
+    notify_msg = "\n".join( [ hit_tostr(x) for x in nuclei_hits_new ] )
     alerter.notify(notify_msg)
 
 

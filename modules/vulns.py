@@ -5,6 +5,7 @@ import json
 import re
 import os
 from typing import Dict, List
+from utils.common import hit_tostr
 
 
 def nuclei_active(nuclei_cmd_or: List[str], http_probes):
@@ -24,13 +25,14 @@ def nuclei_active(nuclei_cmd_or: List[str], http_probes):
     logging.info(f"{incount} items writed to stdin")
 
     for line in proc.stdout:
-        print(line, end="")
+        logging.debug(line.strip())
         p = json.loads(line.strip())
         p_scope = next( (x['scope'] for x in http_probes if x['url'] == p['host']), None )
         # second attempt domain in url
         if not p_scope:
             p_scope = next( (x['scope'] for x in http_probes if p['host'] in x['url']), 'unknown' )
         p['scope'] = p_scope
+        logging.info(hit_tostr(p))
         yield p
 
     nuclei_stderr = "".join(proc.stderr.readlines())

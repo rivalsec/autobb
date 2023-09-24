@@ -102,3 +102,7 @@ class uniq_list(list):
         if iv not in self._seenkees:
             self._seenkees.add(iv)
             return True
+        
+
+def hit_tostr(x):
+    return f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}'

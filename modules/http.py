@@ -29,7 +29,7 @@ def httprobes(domains:List[str], threads=20, savedir = False):
 
     # add scope from origin domains
     for line in proc.stdout:
-        print(line, end="")
+        logging.debug(line.strip())
         p = json.loads(line.strip())
         #validate cnames
         if 'cname' in p:
@@ -42,10 +42,8 @@ def httprobes(domains:List[str], threads=20, savedir = False):
             probe_host, _ = p['input'].split(':')
         else:
             probe_host = p['input']
-        p_scope = next( (x['scope'] for x in domains if x['host'] == probe_host), None )
-        if p_scope:
-            p['scope'] = p_scope
-        
+        p['scope'] = next( (x['scope'] for x in domains if x['host'] == probe_host), "unknown" )
+        logging.info(f"{p['scope']}: {p['url']} [{p['status_code']}] [{p.get('title','')}]")
         yield p
     
     with proc.stderr:
