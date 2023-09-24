@@ -125,9 +125,8 @@ puredns:
   cmd: [
     'puredns', 'resolve', '-q', 
     '-r', './resolvers',
-    '--resolvers-trusted', './resolvers-trusted',
     '--rate-limit', '5000',
-    '--rate-limit-trusted', '1000',
+    '--rate-limit-trusted', '500',
     '--wildcard-batch', '2000000'
   ]
   timeout: 120
