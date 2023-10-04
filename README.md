@@ -6,6 +6,7 @@ echo 524288 > /proc/sys/net/netfilter/nf_conntrack_max
 
 # install docker
 sudo apt-get update && sudo apt install -y docker.io
+
 sudo usermod -aG docker $USER
 
 # install mongo
