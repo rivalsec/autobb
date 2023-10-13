@@ -1,12 +1,12 @@
 # Golang tools build-env
 FROM golang:1.20.2-alpine as build-env
 RUN apk --no-cache add git build-base libpcap-dev
-RUN go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.1.1
-RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.5.7
-RUN go install -v github.com/projectdiscovery/httpx/cmd/httpx@v1.2.9
+RUN go install -v github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.1.9
+RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.6.3
+RUN go install -v github.com/projectdiscovery/httpx/cmd/httpx@v1.3.5
 RUN go install -v github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest
 RUN go install -v github.com/projectdiscovery/shuffledns/cmd/shuffledns@v1.0.9
-RUN go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@v1.1.4
+RUN go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@v1.1.5
 RUN go install -v github.com/d3mondev/puredns/v2@latest
 
 #Release
