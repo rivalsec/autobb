@@ -1,6 +1,6 @@
 import datetime
 from modules.vulns import nuclei_active
-from subs import db_get_modified, severity_sort
+from subs import db_get_modified, nuclei_notify
 import logging
 import compare
 import random
@@ -9,10 +9,11 @@ import os
 
 
 def alert(nuclei_hits, chunk_index, chunks_len):
-    severity_sort(nuclei_hits)
-    notify_msg = f"FullScan chunk {chunk_index}/{chunks_len}\n"
-    notify_msg += "\n".join( [ f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits ] )
-    alerter.notify(notify_msg)
+    nuclei_notify(
+        nuclei_hits,
+        lambda x: f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}',
+        f"FullScan chunk {chunk_index}/{chunks_len}\n"
+    )
 
 
 def fullscan(hosts):

@@ -2,6 +2,7 @@
 from typing import List
 import os
 import random
+import re
 import logging
 import argparse
 from datetime import datetime
@@ -182,10 +183,17 @@ def sites_workflow(domains, httpx_threads=1):
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
     index_fields = ["template-id","matcher-name","matched-at"]
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
+    nuclei_notify(nuclei_hits_new, hit_tostr)
+
+
+def nuclei_notify(nuclei_hits_new, print_func, prefix=""):
     nuclei_hits_new = list(nuclei_hits_new)
     severity_sort(nuclei_hits_new)
-    notify_msg = "\n".join( [ hit_tostr(x) for x in nuclei_hits_new ] )
-    alerter.notify(notify_msg)
+    lines = [ print_func(x) for x in nuclei_hits_new ]
+    filters = config['alerts'].get('filter', [])
+    notify_msg = "\n".join( [item for item in lines if not any(re.search(regex, item) for regex in filters)] )
+    if notify_msg:
+        alerter.notify(prefix + notify_msg)
 
 
 def passive_workflow(all_http_probes):
@@ -197,10 +205,11 @@ def passive_workflow(all_http_probes):
         index_fields = ["template-id","matcher-name","host"]
         nuclei_hits_new = db_get_modified(passive_results, db['nuclei_passive_hits'], index_fields, up_fields, compare.nuclei_hit)
         nuclei_hits_new = list(nuclei_hits_new)
-        severity_sort(nuclei_hits_new)
-        notify_msg = f"Passive scan at {glob.httprobes_savedir}:\n"
-        notify_msg += "\n".join( [ f'{x["scope"]}: {x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits_new ] )
-        alerter.notify(notify_msg)
+        nuclei_notify(
+            nuclei_hits_new, 
+            lambda x: f'{x["scope"]}: {x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}', 
+            f"Passive scan at {glob.httprobes_savedir}:\n"
+        )
 
 
 def notify_ports(port_probes):
