@@ -84,7 +84,7 @@ naabu:
 
 httpx:
   cmd: [
-    'httpx', '-json', '-tech-detect', '-tls-grab', '-follow-host-redirects', '-silent', '-stream',
+    'httpx', '-json', '-tech-detect', '-tls-grab', '-follow-host-redirects', '-silent',
     '-deny', '10.0.0.0/8,100.64.0.0/10,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8', #private networks
   ]
   threads: 100
