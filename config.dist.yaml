@@ -67,7 +67,7 @@ nuclei:
 # make suid! #> sudo chown root /home/bb/go/bin/naabu; sudo chmod u+s /home/bb/go/bin/naabu
 naabu:
   cmd: [
-    'naabu', '-exclude-cdn', '-no-color', '-json',
+    'naabu', '-exclude-cdn', '-no-color', '-json', '-silent',
     '-exclude-ports', '80,443', #checked with httpx ? remove on ports first
   ]
   # top100
