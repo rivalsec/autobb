@@ -84,8 +84,8 @@ def nuclei_check_templates_count(nuclei_res_stderr):
     if m:
         templates_invalid = int(m.group(1))
     
-    if not templates_loaded or templates_loaded < 500 or templates_invalid > 10:
-        er_m = f"Something wrong with nuclei templates? loaded: {templates_loaded}, invalid: {templates_invalid}"
+    if not templates_loaded or templates_loaded < templates_invalid:
+        er_m = f"Is something wrong with nuclei templates? loaded: {templates_loaded}, invalid: {templates_invalid}"
         alerter.notify(er_m)
 
     logging.info(f"nuclei templates check: loaded {templates_loaded}, invalid {templates_invalid}")
