@@ -372,7 +372,8 @@ def main():
     new_port_probes = []
     if args.ports_olds:
         # otherports
-        port_probes = portprobes(old_scopes_subs, config['naabu']['ports'])
+        port_probes = list(portprobes(old_scopes_subs, config['naabu']['ports']))
+        port_probes, _ = threshold_filter(port_probes, "host", config['ports_weird_threshold'])
         new_port_probes = db_get_modified(port_probes, db['ports'], ['host','port'], ['host','ip','port','scope'], compare.port )
         #new ports notify
         new_port_probes = list(new_port_probes)
