@@ -2,7 +2,9 @@
 It's my solution for bugbounty automation
 
 # Fix for "nf_conntrack: table full, dropping packet"
-echo 524288 > /proc/sys/net/netfilter/nf_conntrack_max
+echo "net.netfilter.nf_conntrack_max=1048576" >> /etc/sysctl.conf
+
+sysctl -p
 
 # install docker
 sudo apt-get update && sudo apt install -y docker.io
@@ -40,3 +42,25 @@ docker run --rm -v /tmp:/dnsout -t dnsvalidator -threads 20 -o /dnsout/resolvers
 
 # run autobb container
 docker run --rm -v $(pwd):/autobb autobb --ports --ports-olds --dns-brute --dns-alts --workflow-olds --nuclei
+
+# export assets from the database
+docker run --rm -v $(pwd):/autobb --entrypoint python autobb ./export.py -h
+
+```
+usage: export.py [-h] [-g {scopes,domains,ports,http_probes}] [-s SCOPE]
+                 [-l LAST_ALIVE] [-p PRINT_FIELD]
+
+exporter
+
+options:
+  -h, --help            show this help message and exit
+  -g {scopes,domains,ports,http_probes}, --get {scopes,domains,ports,http_probes}
+                        get one of (default: None)
+  -s SCOPE, --scope SCOPE
+                        scope to get, if not - all scopes (default: None)
+  -l LAST_ALIVE, --last-alive LAST_ALIVE
+                        days then last time was alive (default: 30)
+  -p PRINT_FIELD, --print-field PRINT_FIELD
+                        object field to print, object json if not set
+                        (default: None)
+```
