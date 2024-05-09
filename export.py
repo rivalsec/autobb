@@ -37,5 +37,7 @@ if __name__ == "__main__":
         p[args.print_field] = 1
     if args.scope:
         q['scope'] = args.scope
+    else:
+        q['scope'] = {"$in":[x['name'] for x in scopes]}
     db_res = db[args.get].find(q, p)
     iprint(db_res, args.print_field)
