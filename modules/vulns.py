@@ -6,6 +6,17 @@ import re
 import os
 from typing import Dict, List
 from utils.common import hit_tostr
+from _thread import start_new_thread
+
+
+nuclei_stderr = ""
+
+def process_errors(stderr):
+    global nuclei_stderr
+    with stderr:
+        for line in stderr:
+            print(line, end="")
+            nuclei_stderr += line
 
 
 def nuclei_active(nuclei_cmd_or: List[str], http_probes):
@@ -17,12 +28,8 @@ def nuclei_active(nuclei_cmd_or: List[str], http_probes):
     logging.info(" ".join(nuclei_cmd))
     proc = Popen(nuclei_cmd, text=True, bufsize=1, stderr=PIPE, stdout=PIPE, stdin=PIPE, errors="backslashreplace")
     
-    incount = 0
-    with proc.stdin as stdin:
-        for d in http_probes:
-            stdin.write(d["url"] + "\n")
-            incount += 1
-    logging.info(f"{incount} items writed to stdin")
+    start_new_thread(process_errors, (proc.stderr,))
+    start_new_thread(stdinwrite, (http_probes, proc.stdin))
 
     for line in proc.stdout:
         logging.debug(line.strip())
@@ -35,11 +42,19 @@ def nuclei_active(nuclei_cmd_or: List[str], http_probes):
         logging.info(hit_tostr(p))
         yield p
 
-    nuclei_stderr = "".join(proc.stderr.readlines())
-    logging.info(nuclei_stderr) #info here
+
     #check only on all templates scan
     if not '-tags' in nuclei_cmd:
         nuclei_check_templates_count(nuclei_stderr)
+
+
+def stdinwrite(http_probes, stdin):
+    incount = 0
+    with stdin:
+        for d in http_probes:
+            stdin.write(d["url"] + "\n")
+            incount += 1
+    logging.info(f"{incount} items writed to stdin")
 
 
 def parse_passive_host(file: str):

@@ -2,6 +2,14 @@ import logging
 from subprocess import Popen, PIPE
 from config import config
 import json
+from _thread import start_new_thread
+
+
+def process_errors(stderr):
+    with stderr:
+        for line in stderr:
+            print(line, end="")
+
 
 def portprobes(domains, scan_ports):
     """naabu on domains search fo ports"""
@@ -11,12 +19,9 @@ def portprobes(domains, scan_ports):
 
     proc = Popen(naabu_cmd, text=True, bufsize=1, stderr=PIPE, stdout=PIPE, stdin=PIPE, errors="backslashreplace")
 
-    incount = 0
-    with proc.stdin as stdin:
-        for d in domains:
-            stdin.write(d["host"] + "\n")
-            incount += 1
-    logging.info(f"{incount} items writed to stdin")
+    start_new_thread(process_errors, (proc.stderr,))
+    start_new_thread(stdinwrite, (domains, proc.stdin))
+
 
     # add scope from origin domains
     for line in proc.stdout:
@@ -32,6 +37,12 @@ def portprobes(domains, scan_ports):
         
         yield port
 
-    with proc.stderr:
-        for line in proc.stderr:
-            print(line, end="")
+
+
+def stdinwrite(domains, stdin):
+    incount = 0
+    with stdin:
+        for d in domains:
+            stdin.write(d["host"] + "\n")
+            incount += 1
+    logging.info(f"{incount} items writed to stdin")
