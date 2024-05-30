@@ -105,4 +105,4 @@ class uniq_list(list):
         
 
 def hit_tostr(x):
-    return f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}'
+    return f'{x["scope"]}: {x.get("matched-at","")} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}'
