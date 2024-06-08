@@ -9,6 +9,7 @@ def cli_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter, description='exporter')
     parser.add_argument('-g', '--get', choices=['scopes', 'domains', 'ports', 'http_probes'], help='get one of')
     parser.add_argument('-s', '--scope', help='scope to get, if not - all scopes')
+    parser.add_argument('-a', '--add-date',type=int, help='days then was added to the db', default=0)
     parser.add_argument('-l', '--last-alive',type=int, help='days then last time was alive', default=30)
     parser.add_argument('-p', '--print-field', type=str, help='object field to print, object json if not set')
     args = parser.parse_args()
@@ -33,6 +34,8 @@ if __name__ == "__main__":
     ndaysago = datetime.datetime.now() - datetime.timedelta(days=args.last_alive)
     q = {"last_alive": {"$gte": ndaysago}}
     p = {}
+    if args.add_date:
+        q['add_date']={ "$gte": datetime.datetime.now() - datetime.timedelta(days=args.add_date) }
     if args.print_field:
         p[args.print_field] = 1
     if args.scope:
