@@ -34,6 +34,8 @@ def nuclei_active(nuclei_cmd_or: List[str], http_probes):
     for line in proc.stdout:
         logging.debug(line.strip())
         p = json.loads(line.strip())
+        if 'matched-at' not in p:
+            p['matched-at'] = p['url']
         p_scope = next( (x['scope'] for x in http_probes if x['url'] == p['host']), None )
         # second attempt domain in url
         if not p_scope:
