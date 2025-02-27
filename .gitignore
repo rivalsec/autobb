@@ -12,6 +12,6 @@ tmp_test/
 test.py
 wordlists/
 .pytest_cache/
-resolvers
+/resolvers
 tests/
 subfinder_config.yaml

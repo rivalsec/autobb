@@ -1,50 +1,55 @@
-# autobb
+# AutoBB
 It's my solution for bugbounty automation
 
-# Fix for "nf_conntrack: table full, dropping packet"
-echo "net.netfilter.nf_conntrack_max=1048576" >> /etc/sysctl.conf
+# Quick start guide
 
-sysctl -p
+1) install docker:
+```bash
+sudo snap install docker
+## OR ##
+# curl -fsSL https://get.docker.com -o install-docker.sh
+# sudo sh install-docker.sh
+```
 
-# install docker
-sudo apt-get update && sudo apt install -y docker.io
+2) run mongodb container:
+```bash
+sudo docker run -d -p 127.0.0.1:27017:27017 --net autobbnet --name bbmongodb mongodb/mongodb-community-server:latest
+```
 
-sudo usermod -aG docker $USER
-
-# install mongo
-docker run --restart=always --name bbmongodb -d mongo:latest
-
-# get mongodb ip 
-docker container inspect bbmongodb | grep "IPAddress"
-
-# clone with github token 
+3) get autobb:
+```bash
 git clone https://github.com/rivalsec/autobb.git
-
 cd autobb
-
 cp config.dist.yaml config.yaml
+```
 
-## edit  config
-mkdir wordlists
+4) edit scope and alert sections in config.yaml:
+```bash
+nano config.yaml
+```
 
-cp ~/SecLists/Discovery/DNS/* ./wordlists/
+5) build docker image:
+```bash
+sudo docker build -t autobb .
+```
+This will take some time...
 
-# build
-docker build -t autobb .
+6) run autobb scan in basic(light) mode:
 
-## install dnsvalidator
-git clone https://github.com/vortexau/dnsvalidator.git
+```bash
+sudo docker run --rm -v $(pwd):/autobb --net autobbnet autobb --ports --ports-olds --dns-brute --dns-alts --workflow-olds --nuclei
+```
+In this mode, only new or modified assets will be scanned.
 
-docker build -t dnsvalidator ./dnsvalidator
+## Run autobb in full scan mode
+```bash
+sudo docker run --rm -v $(pwd):/autobb  --net autobbnet --entrypoint python autobb fullscan.py
+```
 
-## run dnsvalidator (add to cron) 
-docker run --rm -v /tmp:/dnsout -t dnsvalidator -threads 20 -o /dnsout/resolvers.txt && mv /tmp/resolvers.txt ./autobb/resolvers
-
-# run autobb container
-docker run --rm -v $(pwd):/autobb autobb --ports --ports-olds --dns-brute --dns-alts --workflow-olds --nuclei
-
-# export assets from the database
-docker run --rm -v $(pwd):/autobb --entrypoint python autobb ./export.py -h
+## Export assets from the database
+```bash
+sudo docker run --rm -v $(pwd):/autobb  --net autobbnet --entrypoint python autobb ./export.py -h
+```
 
 ```
 usage: export.py [-h] [-g {scopes,domains,ports,http_probes}] [-s SCOPE]
@@ -63,4 +68,19 @@ options:
   -p PRINT_FIELD, --print-field PRINT_FIELD
                         object field to print, object json if not set
                         (default: None)
+```
+
+# FAQ
+## Use dnsvalidator to get a fresh resolvers file
+```bash
+git clone https://github.com/vortexau/dnsvalidator.git
+sudo docker build -t dnsvalidator ./dnsvalidator
+## run dnsvalidator (add to crontab)
+sudo docker run --rm -v /tmp:/dnsout -t dnsvalidator -threads 20 -o /dnsout/resolvers.txt && mv /tmp/resolvers.txt ./autobb/resolvers
+```
+
+## Fix for "nf_conntrack: table full, dropping packet"
+```bash
+echo "net.netfilter.nf_conntrack_max=1048576" >> /etc/sysctl.conf
+sysctl -p
 ```

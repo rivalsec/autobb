@@ -8,20 +8,22 @@ scope:
   #   - \.(stage|dev|test)\.hackerone\.com$
   #   - \.test\.internal\.hackerone\.com$
 
-
 alerts:
   use: telegram
-  vkteams: #icq https://icq.com/botapi/?lang=en
+  # https://core.telegram.org/bots/tutorial
+  # Get Chat ID https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
+  telegram: 
+    token: ...
+    chat_id: ... 
+    msg_max_size: 1000 # Larger message will be sent as a txt file
+  # vkteams https://teams.vk.com/botapi/tutorial/
+  vkteams: 
     host: ...
     token: ...
     chat_id: ...
-    msg_max_size: 1000 #small for file test
-  telegram: #https://core.telegram.org/bots/tutorial
-    token: ...
-    chat_id: ...
-    msg_max_size: 1000 #file caption max 1024!
+    msg_max_size: 1000 # Larger message will be sent as a txt file
 
-# APP CONFIG
+
 juicer_filters:
   cname: []
   tls_dns: []
@@ -29,7 +31,7 @@ juicer_filters:
   location: []
 
 db:
-  conn_str: 'mongodb://localhost:27017'
+  conn_str: 'mongodb://bbmongodb:27017'
   database: 'autobbdb'
 
 subfinder: 
@@ -40,6 +42,9 @@ subfinder:
 
 nuclei:
   exclude_templates: []
+  # exclude_templates:
+    # - ./nuclei-templates/http/technologies/tech-detect.yaml
+    # - ./nuclei-templates/http/technologies/nginx/nginx-version.yaml
   cmd: [
     'nuclei', '-no-color', '-jsonl',
     #'-t', "./nuclei-my-templates",
@@ -47,7 +52,7 @@ nuclei:
     '-bulk-size', '50',
     '-concurrency', '4',
   ]
-  # nettwork templates on ports without http(s)
+  # network templates on ports without http(s)
   network_cmd: [
     'nuclei', '-no-color', '-jsonl',
     #'-t', "./nuclei-my-templates",
@@ -64,7 +69,6 @@ nuclei:
     #'-t', './nuclei-my-templates',
   ]  
 
-# make suid! #> sudo chown root /home/bb/go/bin/naabu; sudo chmod u+s /home/bb/go/bin/naabu
 naabu:
   cmd: [
     'naabu', '-exclude-cdn', '-no-color', '-json', '-silent',
@@ -75,7 +79,6 @@ naabu:
     7,9,13,21-23,25-26,37,53,79-81,88,106,110-111,113,119,135,139,143-144,179,199,389,427,443-445,465,513-515,543-544,548,554,587,631,646,873,990,
     993,995,1025-1029,1110,1433,1720,1723,1755,1900,2000-2001,2049,2121,2717,3000,3128,3306,3389,3986,4899,5000,5009,5051,5060,5101,5190,5357,5432,
     5631,5666,5800,5900,6000-6001,6646,7070,8000,8008-8009,8080-8081,8443,8888,9100,9999-10000,32768,49152-49157
-  
   # top100
   ports: >- 
     7,9,13,21-23,25-26,37,53,79-81,88,106,110-111,113,119,135,139,143-144,179,199,389,427,443-445,465,513-515,543-544,548,554,587,631,646,873,990,
@@ -90,14 +93,14 @@ httpx:
   threads: 100
   threads_onnew: 100
 
-wordlist: 'wordlists/subdomains-top1million-110000.txt'
+wordlist: 'example/subdomains-top1million-5000.txt'
 httprobes_history: 5
 sub_domains_weird_threshold: 7000
 ports_weird_threshold: 30
 nuclei_one_time_max: 1000
 shuffledns:
   cmd: [
-    'shuffledns', '--silent', '-sw', '-duc', '-r', './resolvers', 
+    'shuffledns', '--silent', '-sw', '-duc', '-r', './example/resolvers', 
     '-t', '5000', #10000 default
   ]
 dnsx:
@@ -110,24 +113,27 @@ dnsgen:
 domain_filter:
   max_sub: 4   # www.eeee.ddd.fff.domain.tld (4)
   max_len: 50   # minus dot parent length
+
+puredns:
+  cmd: [
+    'puredns', 'resolve', '-q', 
+    '-r', './example/resolvers',
+    '--rate-limit', '3000',
+    '--rate-limit-trusted', '500',
+    #'--wildcard-batch', '2000000'
+  ]
+  timeout: 120
+  chunk_vol_max: 4000000
+
+#fullscan.py
 fullscan:
   host_alive_in_days: 7
-  chunk_max: 8000
+  chunk_max: 800
   nuclei_cmd: [
     'nuclei', '-no-color', '-jsonl',
     #'-t', "./nuclei-my-templates",
     '-t', './nuclei-templates',
     '-bulk-size', '50',
     '-concurrency', '4',
-    #'-severity', 'low,medium,high,critical',
+    '-severity', 'high,critical',
   ]
-puredns:
-  cmd: [
-    'puredns', 'resolve', '-q', 
-    '-r', './resolvers',
-    '--rate-limit', '5000',
-    '--rate-limit-trusted', '500',
-    '--wildcard-batch', '2000000'
-  ]
-  timeout: 120
-  chunk_vol_max: 4000000
