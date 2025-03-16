@@ -19,7 +19,11 @@ def cli_args():
 def iprint(items, field = ''):
     for i in items:
         if field:
-            print(i[field])
+            if type(i[field]) == list:
+                for j in i[field]:
+                    print(j)
+            else:
+                print(i[field])
         else:
             print(json.dumps(i,default=str))
 
