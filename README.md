@@ -13,6 +13,7 @@ sudo snap install docker
 
 2) run mongodb container:
 ```bash
+sudo docker network create autobbnet
 sudo docker run -d -p 127.0.0.1:27017:27017 --net autobbnet --name bbmongodb mongodb/mongodb-community-server:latest
 ```
 
