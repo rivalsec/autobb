@@ -13,9 +13,10 @@ nuclei_stderr = ""
 
 def process_errors(stderr):
     global nuclei_stderr
+    nuclei_stderr = "" # clean up on start 
     with stderr:
         for line in stderr:
-            print(line, end="")
+            logging.info(line.strip())
             nuclei_stderr += line
 
 
