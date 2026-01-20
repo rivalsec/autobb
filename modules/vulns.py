@@ -94,10 +94,10 @@ def nuclei_check_templates_count(nuclei_res_stderr):
     ''' Templates loaded for scan: 507 '''
     templates_loaded = None
     templates_invalid = 0
-    m = re.search("Templates loaded for current scan: (\d+)", nuclei_res_stderr)
+    m = re.search(r"Templates loaded for current scan: (\d+)", nuclei_res_stderr)
     if m:
         templates_loaded = int(m.group(1))
-    m = re.search("Found (\d+) templates with syntax error", nuclei_res_stderr)
+    m = re.search(r"Found (\d+) templates with syntax error", nuclei_res_stderr)
     if m:
         templates_invalid = int(m.group(1))
     

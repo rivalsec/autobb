@@ -21,8 +21,8 @@ def probe_cert_notinscope(http_probe, scopes, filters, weight = 10):
     cert_cn = []
     # extension_server_name is not validate domain! don't add it )
     if 'subject_cn' in http_probe['tls']:
-        cert_cn.append( re.sub("^\*\.",'', http_probe['tls']['subject_cn']) )
-    cert_cn.extend( [re.sub("^\*\.",'',x) for x in http_probe['tls'].get('subject_an', []) ])
+        cert_cn.append( re.sub(r"^\*\.",'', http_probe['tls']['subject_cn']) )
+    cert_cn.extend( [re.sub(r"^\*\.",'',x) for x in http_probe['tls'].get('subject_an', []) ])
     cert_cn = list(dict.fromkeys(cert_cn)) # remove dupes same order
     for cn in cert_cn:
         scope_parents = next( (s['domains'] for s in scopes if s['name']==http_probe['scope']) )
