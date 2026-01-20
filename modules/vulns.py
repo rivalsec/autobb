@@ -67,7 +67,8 @@ def parse_passive_host(file: str):
 def nuclei_passive(probes_dir, all_probes, type = 'passive'):
     #delete (passive scanner can't parse it)
     index_file = glob.httprobes_savedir + '/index.txt'
-    os.remove(index_file)
+    if os.path.exists(index_file):
+        os.remove(index_file)
 
     if type == 'file':
         nuclei_cmd = config['nuclei']['file_cmd'].copy()
