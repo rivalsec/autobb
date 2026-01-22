@@ -8,7 +8,7 @@ from _thread import start_new_thread
 def process_errors(stderr):
     with stderr:
         for line in stderr:
-            print(line, end="")
+            logging.info(line.strip())
 
 
 def portprobes(domains, scan_ports):
