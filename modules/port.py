@@ -25,7 +25,7 @@ def portprobes(domains, scan_ports):
 
     # add scope from origin domains
     for line in proc.stdout:
-        print(line, end="")
+        logging.info(line.strip())
         port = json.loads(line.strip())
         #ip portscan fix
         if 'host' not in port:
