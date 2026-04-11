@@ -9,6 +9,8 @@ scope:
   #   - \.test\.internal\.hackerone\.com$
 
 alerts:
+  # single: use: telegram
+  # multiple: use: [telegram, smtp]
   use: telegram
   # https://core.telegram.org/bots/tutorial
   # Get Chat ID https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
@@ -17,11 +19,24 @@ alerts:
     chat_id: ... 
     msg_max_size: 1000 # Larger message will be sent as a txt file
   # vkteams https://teams.vk.com/botapi/tutorial/
-  vkteams: 
+  vkteams:
     host: ...
     token: ...
     chat_id: ...
     msg_max_size: 1000 # Larger message will be sent as a txt file
+  smtp:
+    host: smtp.example.com
+    port: 587
+    tls: true      # STARTTLS on submission port (587)
+    ssl: false     # set true (and port 465) for implicit SSL
+    username: user@example.com
+    password: ...
+    from: autobb@example.com
+    to:            # string or list
+      - me@example.com
+    subject: autobb alert
+    msg_max_size: 4000 # Larger message will be attached as a txt file
+    timeout: 30
 
 
 juicer_filters:

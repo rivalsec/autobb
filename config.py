@@ -46,9 +46,31 @@ scopes = load_scopes()
 mongodb_client = MongoClient(config['db']['conn_str'])
 db = mongodb_client[config['db']['database']]
 
-#set alerter from config and set alerter config (token etc)
-alerter_name = config['alerts']['use']
-alerter = importlib.import_module(f"modules.alerts.{alerter_name}")
-alerter.config = config['alerts'][alerter_name]
+#set alerter(s) from config and set alerter config (token etc)
+#alerts.use can be a single name ("telegram") or a list (["telegram", "email"])
+_alerts_use = config['alerts']['use']
+if isinstance(_alerts_use, str):
+    _alerts_use = [_alerts_use]
+
+class _MultiAlerter:
+    def __init__(self, names):
+        self.backends = []
+        for name in names:
+            mod = importlib.import_module(f"modules.alerts.{name}")
+            mod.config = config['alerts'][name]
+            self.backends.append((name, mod))
+
+    def notify(self, msg, **kwargs):
+        results = []
+        for name, mod in self.backends:
+            try:
+                results.append(mod.notify(msg, **kwargs))
+            except TypeError:
+                results.append(mod.notify(msg))
+            except Exception as e:
+                print(f"[alerts:{name}] notify failed: {e}")
+        return results
+
+alerter = _MultiAlerter(_alerts_use)
 
 glob = Globals()
