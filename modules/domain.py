@@ -91,8 +91,9 @@ def subdomains_gen(domain, oldsubs, wordlist=None, alts_max=200000, alts_wordlen
     combined_oldsubs = list(map(str.lower, oldsubs))
 
     if scope_alts:
-        combined_oldsubs.extend(map(str.lower, scope_alts))
-        logging.info(f"{domain} +{len(scope_alts)} from in-scope alts")
+        scope_alts_hosts = [f"{p}.{domain}" for p in scope_alts]
+        combined_oldsubs.extend(scope_alts_hosts)
+        logging.info(f"{domain} +{len(scope_alts_hosts)} from in-scope alts")
 
     harv_root = config.get('harvested_dir', 'harvested')
     if os.path.isdir(harv_root):

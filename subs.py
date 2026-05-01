@@ -300,7 +300,10 @@ def main():
         #add cidrs/ips to old
         old_scopes_subs.extend(hosts_from_cidrs_ips(scope))
 
-        scope_alts_map[scope['name']] = [s['host'] for s in old_clean_subs]
+        scope_alts_map[scope['name']] = extract_prefixes(
+            [{'host': s['host'], 'scope': scope['name']} for s in old_clean_subs],
+            {scope['name']: scope.get('domains', [])}
+        )
         scope_parents[scope['name']] = scope.get('domains', [])
         for d in scope.get('domains', []):
             domain_to_scope[d] = scope['name']
