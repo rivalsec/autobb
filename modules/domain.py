@@ -13,6 +13,26 @@ import uuid
 import os
 
 
+def extract_prefixes(subdomains, scope_parents):
+    """
+    Extract full subdomain prefixes from all-scope discovered subdomains for cross-scope brute force.
+    subdomains: list of dicts with 'host' and 'scope' fields
+    scope_parents: {scope_name: [parent_domain_str, ...]}
+    Returns set of prefix strings like 'api.v2', 'dev-api'.
+    """
+    prefixes = set()
+    for sub in subdomains:
+        host = sub['host'].lower()
+        for parent in scope_parents.get(sub.get('scope', ''), []):
+            suffix = '.' + parent
+            if host.endswith(suffix) and host != parent:
+                prefix = host[:-len(suffix)]
+                if prefix:
+                    prefixes.add(prefix)
+                break
+    return prefixes
+
+
 def subdomain_isgood(d:str, parent:str):
     plen = len(parent) + 1
     if not d.endswith('.' + parent) and d != parent:
@@ -50,7 +70,8 @@ def subfinder(domain:str):
     return out
 
 
-def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordlen=2, use_subfinder=True):
+def subdomains_gen(domain, oldsubs, wordlist=None, alts_max=200000, alts_wordlen=2,
+                   use_subfinder=True, scope_alts=None, brute_prefixes=None):
     '''
     only string subs
     subfinder + brute + alts
@@ -76,6 +97,11 @@ def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordl
         logging.info(f"{domain} +{len(subs_brute)} from {wordlist}")
         subs.update(subs_brute)
 
+    if brute_prefixes:
+        subs_prefix = set(filter(subf, (f"{p}.{domain}" for p in brute_prefixes)))
+        logging.info(f"{domain} +{len(subs_prefix)} from all-scope prefixes")
+        subs.update(subs_prefix)
+
     # 3) harvested subs from previous-session response harvests
     harv_root = config.get('harvested_dir', 'harvested')
     harvested = set()
@@ -90,9 +116,9 @@ def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordl
             logging.info(f"{domain} +{len(harvested)} from harvested subs ({files} files in {harv_root}/)")
             subs.update(harvested)
 
-    # make alts from old subs + harvested (real observed hostnames)
+    # make alts from old subs + harvested + in-scope subs from other domains (real observed hostnames)
     if alts_max and alts_max > 0:
-        alts_input = list(set(oldsubs) | harvested)
+        alts_input = list(set(oldsubs) | harvested | set(scope_alts or []))
         random.shuffle(alts_input)
         subs_alts_gen = dnsgen.generate(alts_input, wordlen=alts_wordlen, fast=False)
         subs_alts = set(itertools.islice(filter(subf, subs_alts_gen), alts_max))
@@ -187,7 +213,8 @@ def issub(sub, domain):
     return False
 
 
-def domain_purespray(domains, old_subs, alts_max, wordlist, timeout=120, use_subfinder=True) -> List[Dict]:
+def domain_purespray(domains, old_subs, alts_max, wordlist, timeout=120, use_subfinder=True,
+                     domain_to_scope=None, scope_alts_map=None, all_scope_prefixes=None) -> List[Dict]:
     """
     spray puredns check of random subs an set scope to them,
     return list of Dict {'host', 'parent_host','scope'??}
@@ -196,7 +223,12 @@ def domain_purespray(domains, old_subs, alts_max, wordlist, timeout=120, use_sub
     for d in domains:
         domain_subs = list(filter(lambda x: subdomain_isgood(x['host'], d), old_subs))
         oldsubs_list = list([ x['host'] for x in domain_subs ])
-        chsubs.extend(subdomains_gen(d, oldsubs_list, wordlist, alts_max=alts_max, use_subfinder=use_subfinder))
+        d_scope = (domain_to_scope or {}).get(d)
+        d_scope_alts = list((scope_alts_map or {}).get(d_scope, []))
+        chsubs.extend(subdomains_gen(d, oldsubs_list, wordlist, alts_max=alts_max,
+                                     use_subfinder=use_subfinder,
+                                     scope_alts=d_scope_alts,
+                                     brute_prefixes=all_scope_prefixes))
     #pure subs shuffle !!
     random.shuffle(chsubs)
     puresubs = puredns(chsubs, timeout)

@@ -12,7 +12,7 @@ import math
 import ipaddress
 import traceback
 from juicy import juicer, http_probes_validators, domain_validators
-from modules.domain import dnsx, domain_purespray
+from modules.domain import dnsx, domain_purespray, extract_prefixes
 from modules.http import httprobes
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
@@ -287,14 +287,23 @@ def main():
     old_scopes_subs = uniq_list('host')
     subs_now = uniq_list('host')
 
+    scope_alts_map = {}   # {scope_name: [hostname strings]} for in-scope alts seeding
+    domain_to_scope = {}  # {root_domain: scope_name}
+    scope_parents = {}    # {scope_name: [parent_domain_strings]} for prefix extraction
+
     recon_domains = set()
     for scope in scopes:
         logging.info(f"Collect {scope['name']}'s subdomains")
         tmp_scope_subs = db['domains'].find({'scope': scope['name']})
-        old_clean_subs = filter(lambda d: domain_inscope(d['host'], scope), tmp_scope_subs)
+        old_clean_subs = list(filter(lambda d: domain_inscope(d['host'], scope), tmp_scope_subs))
         old_scopes_subs.extend(old_clean_subs)
         #add cidrs/ips to old
         old_scopes_subs.extend(hosts_from_cidrs_ips(scope))
+
+        scope_alts_map[scope['name']] = [s['host'] for s in old_clean_subs]
+        scope_parents[scope['name']] = scope.get('domains', [])
+        for d in scope.get('domains', []):
+            domain_to_scope[d] = scope['name']
 
         if scope['subs_recon'] == True:
             recon_domains.update(scope['domains'])
@@ -305,6 +314,10 @@ def main():
             scope_update(scope_subs_now, scope['name'])
             subs_now.extend(scope_subs_now)
             logging.info(f"{scope['name']} {len(scope_subs_now)} resolved domains")
+
+    all_scope_prefixes = extract_prefixes(list(old_scopes_subs), scope_parents)
+    if all_scope_prefixes:
+        logging.info(f"Extracted {len(all_scope_prefixes)} prefixes from all-scope subdomains for brute force")
 
     #process recon domains
     logging.info(f"Recon flow on {len(recon_domains)} domains...")
@@ -321,6 +334,9 @@ def main():
                                    config['wordlist'] if args.dns_brute else None,
                                    config['puredns']['timeout'],
                                    use_subfinder=not args.no_subfinder,
+                                   domain_to_scope=domain_to_scope,
+                                   scope_alts_map=scope_alts_map,
+                                   all_scope_prefixes=all_scope_prefixes,
                                    )
         chi += 1
         logging.info(f"checking for subdomains weird results")
