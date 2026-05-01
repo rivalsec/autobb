@@ -16,6 +16,7 @@ from modules.domain import dnsx, domain_purespray
 from modules.http import httprobes
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
+from modules.txt_harvester import harvest_savedir
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
 from utils.common import uniq_list, file_lines_count, hit_tostr
 from config import config, scopes, db, glob, alerter
@@ -48,6 +49,7 @@ def cli_args():
     parser.add_argument('--ports-olds', action='store_true', help='rescan ports top 100 on old probes')
     parser.add_argument('--nuclei', action='store_true', help='nuclei tests on new')
     parser.add_argument('--passive', action='store_true', help='passive nuclei checks')
+    parser.add_argument('--no-subfinder', action='store_true', help='skip the subfinder step in subdomain generation')
     args = parser.parse_args()
     return args
 
@@ -152,10 +154,8 @@ def sites_workflow(domains, httpx_threads=1):
     '''
     # random order for httpx
     random.shuffle(domains)
-    if args.passive:
-        httprobe_res = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
-    else:
-        httprobe_res = httprobes(domains, threads=httpx_threads)
+
+    httprobe_res = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
 
     #new probes
     up_fields = ["url", "scheme","port","hash","a","cnames","input", "location","title","webserver",
@@ -316,10 +316,11 @@ def main():
     for i in range(0, allc, chunk_size):
         logging.info(f"Start recon chunk {chi}/{chunks_num} size {chunk_size}")
         chunk = recon_domains[i:i+chunk_size]
-        recon_subs = domain_purespray(chunk, old_scopes_subs, 
+        recon_subs = domain_purespray(chunk, old_scopes_subs,
                                    config['dnsgen']['max'] if args.dns_alts else 0,
                                    config['wordlist'] if args.dns_brute else None,
                                    config['puredns']['timeout'],
+                                   use_subfinder=not args.no_subfinder,
                                    )
         chi += 1
         logging.info(f"checking for subdomains weird results")
@@ -397,26 +398,23 @@ def main():
         #http_probes include ports too
         passive_workflow( list(db['http_probes'].find(q, project)) )
 
+    # harvest in-scope hosts/URLs from the saved http response files
+    harvest_savedir(glob.httprobes_savedir, glob.harvested_dir)
+
 
 def main_gc():
     '''
     Garbage collector:
-    - del old httprobes
+    - del old httprobes / tmp / harvested dirs
     '''
-    httprobe_dirs = os.listdir('httprobes')
-    httprobe_dirs.sort()
-    while len(httprobe_dirs) > config['httprobes_history']:
-        dir_todel = "httprobes/" + httprobe_dirs.pop(0)
-        logging.info(f"Deleting {dir_todel}")
-        shutil.rmtree(dir_todel, ignore_errors=True)
-
-    #tmp dir
-    tmp_dirs = os.listdir('tmp')
-    tmp_dirs.sort()
-    while len(tmp_dirs) > config['httprobes_history']:
-        dir_todel = "tmp/" + tmp_dirs.pop(0)
-        logging.info(f"Deleting {dir_todel}")
-        shutil.rmtree(dir_todel, ignore_errors=True)
+    for base in ('httprobes', 'tmp', 'harvested'):
+        if not os.path.isdir(base):
+            continue
+        dirs = sorted(os.listdir(base))
+        while len(dirs) > config['httprobes_history']:
+            dir_todel = base + '/' + dirs.pop(0)
+            logging.info(f"Deleting {dir_todel}")
+            shutil.rmtree(dir_todel, ignore_errors=True)
 
 
 if __name__ == "__main__":

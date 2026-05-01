@@ -25,6 +25,10 @@ COPY --from=build-env /massdns/bin/massdns /usr/bin/massdns
 ADD ./requirements.txt /requirements.txt
 RUN pip install --no-cache-dir --no-cache -r requirements.txt
 
+# keep ephemeral run artifacts (httprobes/, tmp/) off the bind-mounted /autobb
+# so files don't end up host-owned by container-root; harvested/ stays on /autobb
+ENV AUTOBB_RUNTIME_DIR=/var/autobb
+
 WORKDIR /autobb
 
 ENTRYPOINT ["python", "subs.py"]

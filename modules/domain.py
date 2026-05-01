@@ -50,7 +50,7 @@ def subfinder(domain:str):
     return out
 
 
-def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordlen=2):
+def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordlen=2, use_subfinder=True):
     '''
     only string subs
     subfinder + brute + alts
@@ -60,8 +60,11 @@ def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordl
 
     # 1) get all from subfinder
     subs = set()
-    subs.update(filter(subf, subfinder(domain)))
-    logging.info(f"{domain} +{len(subs)} subfinder")
+    if use_subfinder:
+        subs.update(filter(subf, subfinder(domain)))
+        logging.info(f"{domain} +{len(subs)} subfinder")
+    else:
+        logging.info(f"{domain} subfinder skipped")
 
     subs.add(domain)
     #already reconed subdomains from database
@@ -73,12 +76,27 @@ def subdomains_gen(domain, oldsubs, wordlist = None, alts_max=200000, alts_wordl
         logging.info(f"{domain} +{len(subs_brute)} from {wordlist}")
         subs.update(subs_brute)
 
-    # make alts from old subs
-    if alts_max and alts_max > 0:        
-        random.shuffle(oldsubs)
-        subs_alts_gen = dnsgen.generate(oldsubs, wordlen=alts_wordlen, fast=False)
+    # 3) harvested subs from previous-session response harvests
+    harv_root = config.get('harvested_dir', 'harvested')
+    harvested = set()
+    if os.path.isdir(harv_root):
+        files = 0
+        for entry in sorted(os.listdir(harv_root)):
+            sf = os.path.join(harv_root, entry, 'subs.txt')
+            if os.path.isfile(sf):
+                harvested.update(filter(subf, map(str.lower, file_to_list(sf))))
+                files += 1
+        if harvested:
+            logging.info(f"{domain} +{len(harvested)} from harvested subs ({files} files in {harv_root}/)")
+            subs.update(harvested)
+
+    # make alts from old subs + harvested (real observed hostnames)
+    if alts_max and alts_max > 0:
+        alts_input = list(set(oldsubs) | harvested)
+        random.shuffle(alts_input)
+        subs_alts_gen = dnsgen.generate(alts_input, wordlen=alts_wordlen, fast=False)
         subs_alts = set(itertools.islice(filter(subf, subs_alts_gen), alts_max))
-        logging.info(f"{domain} +{len(subs_alts)} alt subdomains from {len(oldsubs)} old ones (dnsgen wordlen={alts_wordlen} fast=False)")
+        logging.info(f"{domain} +{len(subs_alts)} alt subdomains from {len(alts_input)} seeds (dnsgen wordlen={alts_wordlen} fast=False)")
         subs.update(subs_alts)
 
     logging.info(f"{domain} {len(subs)} in total subdomains to check")
@@ -169,16 +187,16 @@ def issub(sub, domain):
     return False
 
 
-def domain_purespray(domains, old_subs, alts_max, wordlist, timeout=120) -> List[Dict]:
+def domain_purespray(domains, old_subs, alts_max, wordlist, timeout=120, use_subfinder=True) -> List[Dict]:
     """
-    spray puredns check of random subs an set scope to them, 
+    spray puredns check of random subs an set scope to them,
     return list of Dict {'host', 'parent_host','scope'??}
     """
     chsubs = list()
     for d in domains:
         domain_subs = list(filter(lambda x: subdomain_isgood(x['host'], d), old_subs))
         oldsubs_list = list([ x['host'] for x in domain_subs ])
-        chsubs.extend(subdomains_gen(d,oldsubs_list, wordlist, alts_max=alts_max ))
+        chsubs.extend(subdomains_gen(d, oldsubs_list, wordlist, alts_max=alts_max, use_subfinder=use_subfinder))
     #pure subs shuffle !!
     random.shuffle(chsubs)
     puresubs = puredns(chsubs, timeout)

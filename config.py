@@ -34,8 +34,13 @@ class Globals:
     def __init__(self) -> None:
         ts_now = tsnow()
         self.cwd = os.path.dirname(os.path.realpath(__file__))
-        self.httprobes_savedir = f"httprobes/{ts_now}"
-        self.tmp_dir = f"tmp/{ts_now}"
+        # ephemeral run-time dirs (kept off the mount so files don't end up
+        # owned by container-root on the host); harvested/ stays on cwd to
+        # persist via the bind mount.
+        runtime_root = os.environ.get('AUTOBB_RUNTIME_DIR', '.')
+        self.httprobes_savedir = f"{runtime_root}/httprobes/{ts_now}"
+        self.tmp_dir = f"{runtime_root}/tmp/{ts_now}"
+        self.harvested_dir = f"harvested/{ts_now}"
 
 
 with open("config.yaml","r") as config_stream:
