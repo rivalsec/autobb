@@ -300,8 +300,21 @@ def main():
         #add cidrs/ips to old
         old_scopes_subs.extend(hosts_from_cidrs_ips(scope))
 
+        scope_alts_hosts = []
+        for s in old_clean_subs:
+            scope_alts_hosts.append(s['host'])
+            for ptr in (s.get('a_rev') or []):
+                if ptr:
+                    scope_alts_hosts.append(ptr)
+            for cn in (s.get('cname') or []):
+                if cn:
+                    scope_alts_hosts.append(cn)
+        for probe in db['http_probes'].find({'scope': scope['name']}, {'tls-grab': 1}):
+            for cn in ((probe.get('tls-grab') or {}).get('common_name') or []):
+                if cn:
+                    scope_alts_hosts.append(cn.lstrip('*.'))
         scope_alts_map[scope['name']] = extract_prefixes(
-            [{'host': s['host'], 'scope': scope['name']} for s in old_clean_subs],
+            [{'host': h, 'scope': scope['name']} for h in scope_alts_hosts],
             {scope['name']: scope.get('domains', [])}
         )
         scope_parents[scope['name']] = scope.get('domains', [])
