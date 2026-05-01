@@ -87,9 +87,28 @@ def subdomains_gen(domain, oldsubs, wordlist=None, alts_max=200000, alts_wordlen
     else:
         logging.info(f"{domain} subfinder skipped")
 
+    # combine oldsubs with scope_alts and harvested — all feed subs and alts seeds together
+    combined_oldsubs = list(map(str.lower, oldsubs))
+
+    if scope_alts:
+        combined_oldsubs.extend(map(str.lower, scope_alts))
+        logging.info(f"{domain} +{len(scope_alts)} from in-scope alts")
+
+    harv_root = config.get('harvested_dir', 'harvested')
+    if os.path.isdir(harv_root):
+        files = 0
+        harvested_list = []
+        for entry in sorted(os.listdir(harv_root)):
+            sf = os.path.join(harv_root, entry, 'subs.txt')
+            if os.path.isfile(sf):
+                harvested_list.extend(map(str.lower, file_to_list(sf)))
+                files += 1
+        if harvested_list:
+            combined_oldsubs.extend(harvested_list)
+            logging.info(f"{domain} +{len(harvested_list)} from harvested subs ({files} files in {harv_root}/)")
+
     subs.add(domain)
-    #already reconed subdomains from database
-    subs.update(filter(subf, map(str.lower, oldsubs)))
+    subs.update(filter(subf, combined_oldsubs))
 
     if wordlist:
         # 2) brute subs
@@ -102,23 +121,9 @@ def subdomains_gen(domain, oldsubs, wordlist=None, alts_max=200000, alts_wordlen
         logging.info(f"{domain} +{len(subs_prefix)} from all-scope prefixes")
         subs.update(subs_prefix)
 
-    # 3) harvested subs from previous-session response harvests
-    harv_root = config.get('harvested_dir', 'harvested')
-    harvested = set()
-    if os.path.isdir(harv_root):
-        files = 0
-        for entry in sorted(os.listdir(harv_root)):
-            sf = os.path.join(harv_root, entry, 'subs.txt')
-            if os.path.isfile(sf):
-                harvested.update(filter(subf, map(str.lower, file_to_list(sf))))
-                files += 1
-        if harvested:
-            logging.info(f"{domain} +{len(harvested)} from harvested subs ({files} files in {harv_root}/)")
-            subs.update(harvested)
-
-    # make alts from old subs + harvested + in-scope subs from other domains (real observed hostnames)
+    # make alts from combined old subs (real observed hostnames)
     if alts_max and alts_max > 0:
-        alts_input = list(set(oldsubs) | harvested | set(scope_alts or []))
+        alts_input = list(set(combined_oldsubs))
         random.shuffle(alts_input)
         subs_alts_gen = dnsgen.generate(alts_input, wordlen=alts_wordlen, fast=False)
         subs_alts = set(itertools.islice(filter(subf, subs_alts_gen), alts_max))
