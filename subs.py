@@ -304,15 +304,22 @@ def main():
         for s in old_clean_subs:
             scope_alts_hosts.append(s['host'])
             for ptr in (s.get('a_rev') or []):
-                if ptr:
+                if ptr and domain_inscope(ptr, scope):
                     scope_alts_hosts.append(ptr)
             for cn in (s.get('cname') or []):
-                if cn:
+                if cn and domain_inscope(cn, scope):
                     scope_alts_hosts.append(cn)
-        for probe in db['http_probes'].find({'scope': scope['name']}, {'tls-grab': 1}):
-            for cn in ((probe.get('tls-grab') or {}).get('common_name') or []):
+        for probe in db['http_probes'].find({'scope': scope['name']}, {'tls': 1}):
+            tls = probe.get('tls') or {}
+            tls_hosts = []
+            for field in ('subject_cn', 'subject_an', 'sni'):
+                val = tls.get(field) or []
+                tls_hosts += [val] if isinstance(val, str) else val
+            for cn in tls_hosts:
                 if cn:
-                    scope_alts_hosts.append(cn.lstrip('*.'))
+                    cn = cn.lstrip('*.')
+                    if domain_inscope(cn, scope):
+                        scope_alts_hosts.append(cn)
         scope_alts_map[scope['name']] = extract_prefixes(
             [{'host': h, 'scope': scope['name']} for h in scope_alts_hosts],
             {scope['name']: scope.get('domains', [])}
