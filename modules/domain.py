@@ -126,9 +126,11 @@ def subdomains_gen(domain, oldsubs, wordlist=None, alts_max=200000, alts_wordlen
     if alts_max and alts_max > 0:
         alts_input = list(set(combined_oldsubs))
         random.shuffle(alts_input)
-        subs_alts_gen = dnsgen.generate(alts_input, wordlen=alts_wordlen, fast=False)
+        alts_fast = bool(config.get('dnsgen', {}).get('fast', False))
+        alts_wordlen = int(config.get('dnsgen', {}).get('wordlen', alts_wordlen))
+        subs_alts_gen = dnsgen.generate(alts_input, wordlen=alts_wordlen, fast=alts_fast)
         subs_alts = set(itertools.islice(filter(subf, subs_alts_gen), alts_max))
-        logging.info(f"{domain} +{len(subs_alts)} alt subdomains from {len(alts_input)} seeds (dnsgen wordlen={alts_wordlen} fast=False)")
+        logging.info(f"{domain} +{len(subs_alts)} alt subdomains from {len(alts_input)} seeds (dnsgen wordlen={alts_wordlen} fast={alts_fast})")
         subs.update(subs_alts)
 
     logging.info(f"{domain} {len(subs)} in total subdomains to check")
