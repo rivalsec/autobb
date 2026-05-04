@@ -2,7 +2,7 @@ from typing import Dict, List
 import logging
 import re
 import subprocess
-from dnsgen import dnsgen
+from modules.dnsgen import create_generator
 from utils.common import file_to_list, is_private_ip
 import itertools
 import random
@@ -11,6 +11,16 @@ import json
 from functools import partial
 import uuid
 import os
+
+
+_dnsgen = None
+
+
+def _get_dnsgen():
+    global _dnsgen
+    if _dnsgen is None:
+        _dnsgen = create_generator()
+    return _dnsgen
 
 
 def extract_prefixes(subdomains, scope_parents):
@@ -128,7 +138,7 @@ def subdomains_gen(domain, oldsubs, wordlist=None, alts_max=200000, alts_wordlen
         random.shuffle(alts_input)
         alts_fast = bool(config.get('dnsgen', {}).get('fast', False))
         alts_wordlen = int(config.get('dnsgen', {}).get('wordlen', alts_wordlen))
-        subs_alts_gen = dnsgen.generate(alts_input, wordlen=alts_wordlen, fast=alts_fast)
+        subs_alts_gen = _get_dnsgen().generate(alts_input, wordlen=alts_wordlen, fast_mode=alts_fast)
         subs_alts = set(itertools.islice(filter(subf, subs_alts_gen), alts_max))
         logging.info(f"{domain} +{len(subs_alts)} alt subdomains from {len(alts_input)} seeds (dnsgen wordlen={alts_wordlen} fast={alts_fast})")
         subs.update(subs_alts)
