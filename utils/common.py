@@ -77,6 +77,39 @@ def threshold_filter(items:Dict[str,Any], item_key:str, threshold:int):
     return items, filtred
 
 
+def prefix_cluster_filter(items, prefix_len, group_max,
+                          group_keys=('host', 'status_code', 'content_length'),
+                          path_key='path'):
+    """Collapse over-sized prefix clusters into a single representative.
+
+    For each unique combination of group_keys plus the first prefix_len chars
+    of the path (case-insensitive, leading slash stripped), if the bucket has
+    more than group_max items only the shortest path is kept; the rest are
+    returned as 'filtered'. Catches wordlist-style wildcards like
+    admin/administrator/adminpanel all responding with same status+length.
+    """
+    groups = collections.defaultdict(list)
+    for it in items:
+        path = (it.get(path_key) or '').lstrip('/').lower()
+        prefix = path[:prefix_len]
+        bucket = tuple(it.get(k) for k in group_keys) + (prefix,)
+        groups[bucket].append(it)
+
+    keep, filtred = [], []
+    for bucket, bucket_items in groups.items():
+        if len(bucket_items) > group_max:
+            bucket_items.sort(key=lambda x: len(x.get(path_key) or ''))
+            rep = bucket_items[0]
+            keep.append(rep)
+            filtred.extend(bucket_items[1:])
+            logging.info(
+                f"prefix cluster {bucket} size {len(bucket_items)} collapsed to {rep.get(path_key)}"
+            )
+        else:
+            keep.extend(bucket_items)
+    return keep, filtred
+
+
 def scope_update(arr, scope_name):
     for item in arr:
         item['scope'] = scope_name

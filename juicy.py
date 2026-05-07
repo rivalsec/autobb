@@ -83,6 +83,25 @@ def probe_unusual_ports(http_probe, scopes, filters, weight = 20):
         return f" !port:{http_probe['port']}", weight
 
 
+PATH_JUICY_RE = re.compile(
+    r'(admin|backup|\.git|\.env|\.bak|\.sql|\.swp|debug|swagger|actuator|phpinfo|console|metrics|wp-admin|graphql|\.aws|\.ssh|id_rsa)',
+    re.IGNORECASE
+)
+
+
+def path_juicy_keyword(http_path, scopes, filters, weight = 10):
+    """match juicy substrings in path"""
+    path = http_path.get('path', '')
+    if PATH_JUICY_RE.search(path):
+        return f" !key:{path}", weight
+
+
+def path_unusual_status(http_path, scopes, filters, weight = 2):
+    """401/403/500 are interesting (auth-protected / errored)"""
+    if http_path.get('status_code') in (401, 403, 500):
+        return f" !s{http_path['status_code']}", weight
+
+
 def juicer(items, validators, scopes, filters):
     """items juicer"""
     for item in items:
@@ -98,13 +117,15 @@ def juicer(items, validators, scopes, filters):
 # validators
 domain_validators = [domain_cname_notinscope,have_diffs]
 http_probes_validators = [probe_unusual_ports, probe_cert_notinscope, probe_cname_404, probe_unusual404title, probe_location_notinscope, have_diffs]
+http_paths_validators = [path_juicy_keyword, path_unusual_status, have_diffs]
 
 
 if __name__=="__main__":
     from config import config, db, scopes
-    juicy_sorts = [ 
-        {'name':'domains', 'db':'domains', 'validator':domain_validators}, 
-        {'name':'http_probes', 'db':'http_probes', 'validator':http_probes_validators}, 
+    juicy_sorts = [
+        {'name':'domains', 'db':'domains', 'validator':domain_validators},
+        {'name':'http_probes', 'db':'http_probes', 'validator':http_probes_validators},
+        {'name':'http_paths', 'db':'http_paths', 'validator':http_paths_validators},
     ]
     if len(sys.argv) != 2 or sys.argv[1] not in [x['name'] for x in juicy_sorts]:
         print(f"Error! Choose the type of juice from: {', '.join([x['name'] for x in juicy_sorts])}")

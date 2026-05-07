@@ -9,6 +9,7 @@ RUN go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.7.0
 RUN go install -v github.com/projectdiscovery/shuffledns/cmd/shuffledns@v1.2.1
 RUN go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@v1.2.3
 RUN go install -v github.com/d3mondev/puredns/v2@latest
+RUN go install -v github.com/ffuf/ffuf/v2@v2.1.0
 
 #Release
 FROM python:alpine3.17
@@ -21,6 +22,7 @@ COPY --from=build-env /go/bin/subfinder /usr/bin/subfinder
 COPY --from=build-env /go/bin/httpx /usr/bin/httpx
 COPY --from=build-env /go/bin/nuclei /usr/bin/nuclei
 COPY --from=build-env /go/bin/puredns /usr/bin/puredns
+COPY --from=build-env /go/bin/ffuf /usr/bin/ffuf
 COPY --from=build-env /massdns/bin/massdns /usr/bin/massdns
 ADD ./requirements.txt /requirements.txt
 RUN pip install --no-cache-dir --no-cache -r requirements.txt
@@ -32,4 +34,4 @@ ENV AUTOBB_RUNTIME_DIR=/var/autobb
 WORKDIR /autobb
 
 ENTRYPOINT ["python", "subs.py"]
-CMD ["--workflow-olds", "--dns-brute", "--dns-alts", "--ports", "--nuclei", "--ports-olds", "--passive"]
+CMD ["--workflow-olds", "--dns-brute", "--dns-alts", "--ports", "--nuclei", "--ports-olds", "--passive", "--http-fuzz"]

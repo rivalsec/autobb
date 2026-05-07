@@ -11,14 +11,15 @@ import compare
 import math
 import ipaddress
 import traceback
-from juicy import juicer, http_probes_validators, domain_validators
+from juicy import juicer, http_probes_validators, domain_validators, http_paths_validators
 from modules.domain import dnsx, domain_purespray, extract_prefixes
 from modules.http import httprobes
+from modules.httpfuzz import httpfuzz
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
 from modules.txt_harvester import harvest_savedir
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
-from utils.common import uniq_list, file_lines_count, hit_tostr
+from utils.common import uniq_list, file_lines_count, hit_tostr, prefix_cluster_filter
 from config import config, scopes, db, glob, alerter
 
 
@@ -41,7 +42,7 @@ def severity_sort(nuclei_res_l):
 
 
 def cli_args():
-    parser = argparse.ArgumentParser(description='$$$')
+    parser = argparse.ArgumentParser(description='$$$', allow_abbrev=False)
     parser.add_argument('--dns-brute', action='store_true', help='bruteforce subdomains with wordlist')
     parser.add_argument('--dns-alts', action='store_true', help='try alternative permutated subdomains, based on finded')
     parser.add_argument('--workflow-olds', action='store_true', help='httpprobe old subs to find changes, else check only new subdomains')
@@ -49,6 +50,7 @@ def cli_args():
     parser.add_argument('--ports-olds', action='store_true', help='rescan ports top 100 on old probes')
     parser.add_argument('--nuclei', action='store_true', help='nuclei tests on new')
     parser.add_argument('--passive', action='store_true', help='passive nuclei checks')
+    parser.add_argument('--http-fuzz', action='store_true', help='bruteforce dirs/files on new alive http probes (ffuf)')
     parser.add_argument('--no-subfinder', action='store_true', help='skip the subfinder step in subdomain generation')
     args = parser.parse_args()
     return args
@@ -173,6 +175,9 @@ def sites_workflow(domains, httpx_threads=1):
     juicer(sites_new, http_probes_validators, scopes, config['juicer_filters'])
     notify_by_weight(sites_new, "probe(s)", lambda x: f"{x['url']} [{x['status_code']}] [{x.get('title','')}]{x['juicy_info']}")
 
+    if args.http_fuzz:
+        httpfuzz_workflow(sites_new)
+
     if not args.nuclei:
         return
     
@@ -195,6 +200,48 @@ def nuclei_notify(nuclei_hits_new, print_func, prefix=""):
     notify_msg = "\n".join( [item for item in lines if not any(re.search(regex, item) for regex in filters)] )
     if notify_msg:
         alerter.notify(prefix + notify_msg)
+
+
+def httpfuzz_workflow(sites_new):
+    '''
+    bruteforce dirs/files on new alive http probes -> notify
+    '''
+    fuzz_targets = [s for s in sites_new
+                    if s.get('status_code') and 100 <= s['status_code'] < 500]
+    if not fuzz_targets:
+        return
+
+    fuzz_targets = small_scopes_slice(fuzz_targets, scopes, config['httpfuzz']['one_time_max'])
+    logging.info(f"httpfuzz on {len(fuzz_targets)} probes")
+
+    fuzz_hits = list(httpfuzz(
+        fuzz_targets,
+        wordlist=config['httpfuzz']['wordlist'],
+        threads=config['httpfuzz']['threads'],
+        match_codes=config['httpfuzz']['match_codes'],
+        timeout=config['httpfuzz']['per_target_timeout'],
+        parallel=config['httpfuzz']['parallel'],
+        savedir=glob.fuzz_savedir,
+    ))
+    fuzz_hits, _ = threshold_filter(fuzz_hits, 'url', config['httpfuzz']['paths_weird_threshold'])
+    fuzz_hits, _ = prefix_cluster_filter(
+        fuzz_hits,
+        config['httpfuzz']['prefix_cluster_len'],
+        config['httpfuzz']['prefix_cluster_max'],
+    )
+
+    up_fields = ['url','host','path','status_code','content_length','words','lines','redirect','scope']
+    index_fields = ['url','path']
+    paths_new = list(db_get_modified(fuzz_hits, db['http_paths'], index_fields, up_fields, compare.http_path))
+    logging.info(f"{len(paths_new)} new/changed paths found")
+    if not paths_new:
+        return
+
+    juicer(paths_new, http_paths_validators, scopes, config['juicer_filters'])
+    notify_by_weight(
+        paths_new, "path(s)",
+        lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b{x['juicy_info']}"
+    )
 
 
 def passive_workflow(all_http_probes):
@@ -437,8 +484,8 @@ def main():
         #http_probes include ports too
         passive_workflow( list(db['http_probes'].find(q, project)) )
 
-    # harvest in-scope hosts/URLs from the saved http response files
-    harvest_savedir(glob.httprobes_savedir, glob.harvested_dir)
+    # harvest in-scope hosts/URLs from saved http response files (httpx + ffuf)
+    harvest_savedir([glob.httprobes_savedir, glob.fuzz_savedir], glob.harvested_dir)
 
 
 def main_gc():
@@ -446,7 +493,7 @@ def main_gc():
     Garbage collector:
     - del old httprobes / tmp / harvested dirs
     '''
-    for base in ('httprobes', 'tmp', 'harvested'):
+    for base in ('httprobes', 'ffuf', 'tmp', 'harvested'):
         if not os.path.isdir(base):
             continue
         dirs = sorted(os.listdir(base))

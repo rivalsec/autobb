@@ -30,6 +30,14 @@ def port(new, old, compare_history = False):
     return {'equal':True, 'diffs':{}}
 
 
+def http_path(new, old, compare_history = False):
+    """
+    fuzz hits: alert again only on status_code change
+    """
+    compare_fields = ['status_code']
+    return field_comparer(new, old, compare_fields, [], compare_history)
+
+
 def list_to_dict(l):
     return dict([ (str(i),v) for i,v in enumerate(l)])
 

@@ -108,6 +108,21 @@ httpx:
   threads: 100
   threads_onnew: 100
 
+httpfuzz:
+  cmd: [
+    'ffuf', '-ac', '-s',
+    '-timeout', '10',
+  ]   # -of/-o are added by the module (writes to a tempfile)
+  wordlist: 'example/dirs-common.txt'
+  threads: 40                  # ffuf internal threads per process
+  parallel: 4                  # ffuf processes to run concurrently across probes
+  match_codes: '200,204,301,302,307,401,403,405,500'
+  one_time_max: 200            # max number of new probes fuzzed per run (small_scopes_slice)
+  paths_weird_threshold: 200   # if a single host yields more matches than this, drop them all (catch-all)
+  per_target_timeout: 600      # seconds; abort ffuf for a target if it exceeds this
+  prefix_cluster_len: 4        # group hits by first N chars of path for wildcard detection
+  prefix_cluster_max: 5        # if (host,status,length,prefix) cluster exceeds this, keep only shortest path
+
 wordlist: 'example/subdomains-top1million-5000.txt'
 httprobes_history: 5
 sub_domains_weird_threshold: 7000

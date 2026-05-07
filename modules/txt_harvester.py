@@ -134,36 +134,47 @@ def _record_url(raw: str, base: str, seen_urls: set, seen_hosts: set):
     seen_urls.add(url)
 
 
-def harvest_savedir(savedir: str, out_dir: str):
-    if not os.path.isdir(savedir):
-        logging.info(f"[txt-harvester] savedir not found: {savedir}; skip")
-        return
+def harvest_savedir(savedirs, out_dir: str):
+    """Harvest in-scope hosts/URLs from one or more savedirs.
+
+    savedirs - a single dir path or a list of dir paths. Walks each, parses
+    response files (httpx -srd .txt format and ffuf -od raw req/response),
+    merges results into a single subs.txt + links.txt under out_dir.
+    """
+    if isinstance(savedirs, str):
+        savedirs = [savedirs]
 
     seen_hosts: set = set()
     seen_urls: set = set()
     files = 0
+    walked = []
 
-    for root, _dirs, names in os.walk(savedir):
-        for name in names:
-            if name == 'index.txt' or not name.endswith('.txt'):
-                continue
-            path = os.path.join(root, name)
-            try:
-                with open(path, 'rb') as f:
-                    text = f.read().decode('utf-8', errors='replace')
-            except OSError as e:
-                logging.debug(f"[txt-harvester] read fail {path}: {e}")
-                continue
-            response, base = _split_file(text)
-            if not response:
-                continue
-            files += 1
-            for m in URL_RE.finditer(response):
-                _record_url(m.group(0), base, seen_urls, seen_hosts)
-            for m in REL_URL_RE.finditer(response):
-                _record_url(m.group(1), base, seen_urls, seen_hosts)
-            for m in HOST_RE.finditer(response):
-                _record_host(m.group(1), seen_hosts)
+    for savedir in savedirs:
+        if not os.path.isdir(savedir):
+            logging.info(f"[txt-harvester] savedir not found: {savedir}; skip")
+            continue
+        walked.append(savedir)
+        for root, _dirs, names in os.walk(savedir):
+            for name in names:
+                if name == 'index.txt':
+                    continue
+                path = os.path.join(root, name)
+                try:
+                    with open(path, 'rb') as f:
+                        text = f.read().decode('utf-8', errors='replace')
+                except OSError as e:
+                    logging.debug(f"[txt-harvester] read fail {path}: {e}")
+                    continue
+                response, base = _split_file(text)
+                if not response:
+                    continue
+                files += 1
+                for m in URL_RE.finditer(response):
+                    _record_url(m.group(0), base, seen_urls, seen_hosts)
+                for m in REL_URL_RE.finditer(response):
+                    _record_url(m.group(1), base, seen_urls, seen_hosts)
+                for m in HOST_RE.finditer(response):
+                    _record_host(m.group(1), seen_hosts)
 
     os.makedirs(out_dir, exist_ok=True)
     subs_path = os.path.join(out_dir, 'subs.txt')
@@ -175,6 +186,6 @@ def harvest_savedir(savedir: str, out_dir: str):
         for u in sorted(seen_urls):
             f.write(u + '\n')
     logging.info(
-        f"[txt-harvester] scanned {files} responses from {savedir} -> "
+        f"[txt-harvester] scanned {files} responses from {walked} -> "
         f"{len(seen_hosts)} subs ({subs_path}), {len(seen_urls)} links ({links_path})"
     )

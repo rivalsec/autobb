@@ -39,6 +39,7 @@ class Globals:
         # persist via the bind mount.
         runtime_root = os.environ.get('AUTOBB_RUNTIME_DIR', '.')
         self.httprobes_savedir = f"{runtime_root}/httprobes/{ts_now}"
+        self.fuzz_savedir = f"{runtime_root}/ffuf/{ts_now}"
         self.tmp_dir = f"{runtime_root}/tmp/{ts_now}"
         self.harvested_dir = f"harvested/{ts_now}"
 

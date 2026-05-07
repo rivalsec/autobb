@@ -6,6 +6,7 @@ venv/
 config.yaml
 scopes.yaml
 httprobes/
+ffuf/
 tmp/
 tmp_test/
 .DS_Store
