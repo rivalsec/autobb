@@ -3,6 +3,7 @@ from utils.yaml_loader import Loader
 import os
 from pymongo import MongoClient
 from utils.common import tsnow, file_to_list
+from modules.db_indexes import ensure_indexes
 import importlib
 
 
@@ -51,6 +52,7 @@ scopes = load_scopes()
 
 mongodb_client = MongoClient(config['db']['conn_str'])
 db = mongodb_client[config['db']['database']]
+ensure_indexes(db)
 
 #set alerter(s) from config and set alerter config (token etc)
 #alerts.use can be a single name ("telegram") or a list (["telegram", "email"])
