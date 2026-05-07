@@ -359,7 +359,7 @@ def main():
                                    use_subfinder=not args.no_subfinder,
                                    domain_to_scope=domain_to_scope,
                                    scope_alts_map=scope_alts_map,
-                                   all_scope_prefixes=all_scope_prefixes,
+                                   all_scope_prefixes=all_scope_prefixes if args.dns_brute else None,
                                    )
         chi += 1
         logging.info(f"checking for subdomains weird results")
