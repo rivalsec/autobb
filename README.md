@@ -83,6 +83,7 @@ docker run --rm -v $(pwd):/autobb --net autobbnet autobb [FLAGS]
 | `--ports-olds` | Rescan ports on previously known hosts |
 | `--nuclei` | Run nuclei templates on new findings |
 | `--passive` | Run passive nuclei checks |
+| `--http-fuzz` | Bruteforce dirs/files (ffuf) on new alive HTTP probes |
 
 All flags are optional. The default Docker CMD enables all of them.
 
