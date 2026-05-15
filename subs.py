@@ -5,7 +5,7 @@ import random
 import re
 import logging
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 import shutil
 import compare
 import math
@@ -119,6 +119,34 @@ def db_get_modified(items, db_collection, key_fields, fields, compare_func):
                     yield item
 
 
+def stale_probes(db_collection, scan_field, interval_days, alive_in_days, exclude_ids=None):
+    """Probes seen alive in the last `alive_in_days` whose `scan_field` is missing
+    or older than `interval_days`. Returns [] when interval_days is 0/None."""
+    if not interval_days:
+        return []
+    now = datetime.now()
+    q = {
+        "last_alive": {"$gte": now - timedelta(days=alive_in_days)},
+        "$or": [
+            {scan_field: {"$exists": False}},
+            {scan_field: {"$lt": now - timedelta(days=interval_days)}},
+        ],
+    }
+    if exclude_ids:
+        q["_id"] = {"$nin": list(exclude_ids)}
+    return list(db_collection.find(q))
+
+
+def mark_scanned(db_collection, probes, scan_field):
+    ids = [p["_id"] for p in probes if p.get("_id")]
+    if not ids:
+        return
+    db_collection.update_many(
+        {"_id": {"$in": ids}},
+        {"$set": {scan_field: datetime.now()}},
+    )
+
+
 def small_scopes_slice(items, scopes, max):
     """ small scopes at first [][:max]shuffle """
     out = []
@@ -178,18 +206,24 @@ def sites_workflow(domains, httpx_threads=1):
     if args.http_fuzz:
         httpfuzz_workflow(sites_new)
 
-    if not args.nuclei:
-        return
-    
-    sites_new = small_scopes_slice(sites_new, scopes, config['nuclei_one_time_max'])
+    if args.nuclei:
+        nuclei_workflow(sites_new)
 
-    # new site fingerpints nuclei scan
-    nuclei_hits = nuclei_active(config['nuclei']['cmd'], sites_new)
-    #new nuclei hits
+
+def nuclei_workflow(probes):
+    '''slice -> nuclei_active -> dedup hits -> notify -> stamp last_nuclei_scan'''
+    if not probes:
+        return
+    sliced = small_scopes_slice(probes, scopes, config['nuclei_one_time_max'])
+    if not sliced:
+        return
+
+    nuclei_hits = nuclei_active(config['nuclei']['cmd'], sliced)
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
     index_fields = ["template-id","matcher-name","matched-at"]
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
     nuclei_notify(nuclei_hits_new, hit_tostr)
+    mark_scanned(db['http_probes'], sliced, 'last_nuclei_scan')
 
 
 def nuclei_notify(nuclei_hits_new, print_func, prefix=""):
@@ -204,7 +238,7 @@ def nuclei_notify(nuclei_hits_new, print_func, prefix=""):
 
 def httpfuzz_workflow(sites_new):
     '''
-    bruteforce dirs/files on new alive http probes -> notify
+    bruteforce dirs/files on new alive http probes -> notify -> stamp last_httpfuzz_scan
     '''
     fuzz_targets = [s for s in sites_new
                     if s.get('status_code') and 100 <= s['status_code'] < 500]
@@ -223,6 +257,7 @@ def httpfuzz_workflow(sites_new):
         parallel=config['httpfuzz']['parallel'],
         savedir=glob.fuzz_savedir,
     ))
+    mark_scanned(db['http_probes'], fuzz_targets, 'last_httpfuzz_scan')
     fuzz_hits, _ = threshold_filter(fuzz_hits, 'url', config['httpfuzz']['paths_weird_threshold'])
     fuzz_hits, _ = prefix_cluster_filter(
         fuzz_hits,
@@ -242,6 +277,30 @@ def httpfuzz_workflow(sites_new):
         paths_new, "path(s)",
         lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b{x['juicy_info']}"
     )
+
+
+def rescan_workflow():
+    '''Rescan probes whose last_nuclei_scan / last_httpfuzz_scan exceeds the
+    configured interval. Runs after the new/changed-probe passes so freshly
+    stamped probes are naturally excluded.'''
+    if not (args.nuclei or args.http_fuzz):
+        return
+    rescan_cfg = config.get('rescan') or {}
+    alive_days = rescan_cfg.get('host_alive_in_days', 7)
+
+    if args.nuclei:
+        stale = stale_probes(db['http_probes'], 'last_nuclei_scan',
+                             rescan_cfg.get('nuclei_interval_days', 0), alive_days)
+        if stale:
+            logging.info(f"nuclei rescan: {len(stale)} stale probe(s)")
+            nuclei_workflow(stale)
+
+    if args.http_fuzz:
+        stale = stale_probes(db['http_probes'], 'last_httpfuzz_scan',
+                             rescan_cfg.get('httpfuzz_interval_days', 0), alive_days)
+        if stale:
+            logging.info(f"httpfuzz rescan: {len(stale)} stale probe(s)")
+            httpfuzz_workflow(stale)
 
 
 def passive_workflow(all_http_probes):
@@ -474,6 +533,9 @@ def main():
     if args.workflow_olds:
         logging.info("Check old subdomains (--workflow-olds)")
         sites_workflow(old_scopes_subs, config['httpx']['threads'])
+
+    #periodic rescans of stale probes (config['rescan'])
+    rescan_workflow()
 
     #it make sense only after worflow_olds (all new scanned activelly)
     if args.passive:

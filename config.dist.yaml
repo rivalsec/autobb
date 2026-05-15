@@ -123,6 +123,11 @@ httpfuzz:
   prefix_cluster_len: 4        # group hits by first N chars of path for wildcard detection
   prefix_cluster_max: 5        # if (host,status,length,prefix) cluster exceeds this, keep only shortest path
 
+rescan:
+  nuclei_interval_days: 14      # 0 disables periodic nuclei rescan
+  httpfuzz_interval_days: 30    # 0 disables periodic httpfuzz rescan
+  host_alive_in_days: 7         # only rescan probes seen alive within this window
+
 wordlist: 'example/subdomains-top1million-5000.txt'
 httprobes_history: 5
 sub_domains_weird_threshold: 7000
