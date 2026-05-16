@@ -288,19 +288,19 @@ def rescan_workflow():
     rescan_cfg = config.get('rescan') or {}
     alive_days = rescan_cfg.get('host_alive_in_days', 7)
 
-    if args.nuclei:
-        stale = stale_probes(db['http_probes'], 'last_nuclei_scan',
-                             rescan_cfg.get('nuclei_interval_days', 0), alive_days)
-        if stale:
-            logging.info(f"nuclei rescan: {len(stale)} stale probe(s)")
-            nuclei_workflow(stale)
-
     if args.http_fuzz:
         stale = stale_probes(db['http_probes'], 'last_httpfuzz_scan',
                              rescan_cfg.get('httpfuzz_interval_days', 0), alive_days)
         if stale:
             logging.info(f"httpfuzz rescan: {len(stale)} stale probe(s)")
             httpfuzz_workflow(stale)
+
+    if args.nuclei:
+        stale = stale_probes(db['http_probes'], 'last_nuclei_scan',
+                             rescan_cfg.get('nuclei_interval_days', 0), alive_days)
+        if stale:
+            logging.info(f"nuclei rescan: {len(stale)} stale probe(s)")
+            nuclei_workflow(stale)
 
 
 def passive_workflow(all_http_probes):
