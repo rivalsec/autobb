@@ -1,6 +1,7 @@
 import yaml
 from utils.yaml_loader import Loader
 import os
+from datetime import datetime
 from pymongo import MongoClient
 from utils.common import tsnow, file_to_list
 from modules.db_indexes import ensure_indexes
@@ -68,15 +69,33 @@ class _MultiAlerter:
             mod.config = config['alerts'][name]
             self.backends.append((name, mod))
 
-    def notify(self, msg, **kwargs):
+    def notify(self, msg, *, source=None, items=None, **kwargs):
+        dispatch = {}
         results = []
         for name, mod in self.backends:
             try:
                 results.append(mod.notify(msg, **kwargs))
+                dispatch[name] = "ok"
             except TypeError:
                 results.append(mod.notify(msg))
+                dispatch[name] = "ok"
             except Exception as e:
+                dispatch[name] = f"{type(e).__name__}: {e}"
                 print(f"[alerts:{name}] notify failed: {e}")
+        if source is not None:
+            try:
+                doc = {
+                    "created_at": datetime.now(),
+                    "source": source,
+                    "msg": msg,
+                    "items": list(items) if items else [],
+                    "dispatch": dispatch,
+                }
+                if kwargs:
+                    doc["kwargs"] = kwargs
+                db["alerts"].insert_one(doc)
+            except Exception as e:
+                print(f"[alerts:persist] insert failed: {e}")
         return results
 
 alerter = _MultiAlerter(_alerts_use)

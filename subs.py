@@ -201,7 +201,7 @@ def sites_workflow(domains, httpx_threads=1):
         return
 
     juicer(sites_new, http_probes_validators, scopes, config['juicer_filters'])
-    notify_by_weight(sites_new, "probe(s)", lambda x: f"{x['url']} [{x['status_code']}] [{x.get('title','')}]{x['juicy_info']}")
+    notify_by_weight(sites_new, "probe(s)", lambda x: f"{x['url']} [{x['status_code']}] [{x.get('title','')}]{x['juicy_info']}", source="http_probe")
 
     if args.http_fuzz:
         httpfuzz_workflow(sites_new)
@@ -226,14 +226,14 @@ def nuclei_workflow(probes):
     mark_scanned(db['http_probes'], sliced, 'last_nuclei_scan')
 
 
-def nuclei_notify(nuclei_hits_new, print_func, prefix=""):
+def nuclei_notify(nuclei_hits_new, print_func, prefix="", source="nuclei_active"):
     nuclei_hits_new = list(nuclei_hits_new)
     severity_sort(nuclei_hits_new)
     lines = [ print_func(x) for x in nuclei_hits_new ]
     filters = config['alerts'].get('filter', [])
     notify_msg = "\n".join( [item for item in lines if not any(re.search(regex, item) for regex in filters)] )
     if notify_msg:
-        alerter.notify(prefix + notify_msg)
+        alerter.notify(prefix + notify_msg, source=source, items=nuclei_hits_new)
 
 
 def httpfuzz_workflow(sites_new):
@@ -275,7 +275,8 @@ def httpfuzz_workflow(sites_new):
     juicer(paths_new, http_paths_validators, scopes, config['juicer_filters'])
     notify_by_weight(
         paths_new, "path(s)",
-        lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b{x['juicy_info']}"
+        lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b{x['juicy_info']}",
+        source="http_path",
     )
 
 
@@ -313,9 +314,10 @@ def passive_workflow(all_http_probes):
         nuclei_hits_new = db_get_modified(passive_results, db['nuclei_passive_hits'], index_fields, up_fields, compare.nuclei_hit)
         nuclei_hits_new = list(nuclei_hits_new)
         nuclei_notify(
-            nuclei_hits_new, 
-            lambda x: f'{x["scope"]}: {x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}', 
-            f"Passive scan at {glob.httprobes_savedir}:\n"
+            nuclei_hits_new,
+            lambda x: f'{x["scope"]}: {x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}',
+            f"Passive scan at {glob.httprobes_savedir}:\n",
+            source="nuclei_passive",
         )
 
 
@@ -330,15 +332,15 @@ def notify_ports(port_probes):
     
     if notify_lines:
         msg = notify_block(f"+{len(port_probes)} new ports.", notify_lines)
-        alerter.notify(msg)
+        alerter.notify(msg, source="ports", items=port_probes)
 
 
-def notify_by_weight(items:List, title_suffix, print_item_func):
+def notify_by_weight(items:List, title_suffix, print_item_func, source):
     """notify on new or modified items, group by scope, sort by scope juicy weight (mute)"""
     items.sort(key=lambda x: x['juicy_weight'], reverse=True)
     notify_msg = f"+{len(items)} {title_suffix}.\n"
     notify_msg += "\n".join( [ f"{i['scope']}: {print_item_func(i)}" for i in items ] )
-    alerter.notify(notify_msg)
+    alerter.notify(notify_msg, source=source, items=items)
 
 
 def new_ports_workflow(port_items):
@@ -352,7 +354,7 @@ def new_ports_workflow(port_items):
     nuclei_hits_new = list(nuclei_hits_new)
     severity_sort(nuclei_hits_new)
     notify_msg = "\n".join( [ f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits_new ] )
-    alerter.notify(notify_msg)
+    alerter.notify(notify_msg, source="nuclei_network", items=nuclei_hits_new)
 
 
 def hosts_from_cidrs_ips(scope):
@@ -496,7 +498,7 @@ def main():
     if len(new_scopes_subs) > 0:
         juicer(new_scopes_subs, domain_validators, scopes, config['juicer_filters'])
         domains_print_func = lambda x: f"{x['host']} {x.get('a_rev', '')} [{x['juicy_info']}]"
-        notify_by_weight(new_scopes_subs, "domain(s)", domains_print_func)
+        notify_by_weight(new_scopes_subs, "domain(s)", domains_print_func, source="domain")
 
         new_port_probes = []
         if args.ports:

@@ -12,7 +12,8 @@ def alert(nuclei_hits, chunk_index, chunks_len):
     nuclei_notify(
         nuclei_hits,
         lambda x: f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}',
-        f"FullScan chunk {chunk_index}/{chunks_len}\n"
+        f"FullScan chunk {chunk_index}/{chunks_len}\n",
+        source="nuclei_fullscan",
     )
 
 
