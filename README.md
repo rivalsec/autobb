@@ -89,7 +89,7 @@ All flags are optional. The default Docker CMD enables all of them.
 
 **Light scan** (only new/modified assets):
 ```bash
-sudo docker run --rm -v $(pwd):/autobb --net autobbnet autobb --ports --dns-brute --nuclei
+sudo docker run --rm -v $(pwd):/autobb --init --shm-size=2g --net autobbnet autobb --ports --dns-brute --nuclei
 ```
 
 ### fullscan.py -- full vulnerability scan
@@ -97,7 +97,7 @@ sudo docker run --rm -v $(pwd):/autobb --net autobbnet autobb --ports --dns-brut
 Runs nuclei (high/critical) on all hosts alive within the configured window.
 
 ```bash
-sudo docker run --rm -v $(pwd):/autobb --net autobbnet --entrypoint python autobb fullscan.py
+sudo docker run --rm -v $(pwd):/autobb --init --shm-size=2g --net autobbnet --entrypoint python autobb fullscan.py
 ```
 
 ### export.py -- database export
