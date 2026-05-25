@@ -61,10 +61,14 @@ sudo docker build -t autobb .
 ### 5. Run a scan
 
 ```bash
-sudo docker run --rm -v $(pwd):/autobb --net autobbnet autobb
+sudo docker run --rm -v $(pwd):/autobb --init --shm-size=2g --net autobbnet autobb
 ```
 
 This runs the default mode with all flags enabled (see below).
+
+`--init` runs a small init process (tini) as PID 1 so the many short-lived child processes spawned by the pipeline (subfinder, httpx, nuclei, naabu, chromium, ...) get reaped properly and signals are forwarded; without it zombie processes accumulate and Ctrl-C may not stop the container cleanly. 
+
+`--shm-size=2g` enlarges `/dev/shm` (default 64 MB), which the headless chromium used for screenshots/JS rendering needs for inter-process shared memory -- it crashes under load on the default size.
 
 ## Usage
 
