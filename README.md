@@ -88,8 +88,9 @@ docker run --rm -v $(pwd):/autobb --net autobbnet autobb [FLAGS]
 | `--nuclei` | Run nuclei templates on new findings |
 | `--passive` | Run passive nuclei checks |
 | `--http-fuzz` | Bruteforce dirs/files (ffuf) on new alive HTTP probes |
+| `--no-subfinder` | Skip the subfinder (passive OSINT) step in subdomain enumeration |
 
-All flags are optional. The default Docker CMD enables all of them.
+All flags are optional. The default Docker CMD enables every flag except `--no-subfinder`.
 
 **Light scan** (only new/modified assets):
 ```bash
