@@ -13,6 +13,9 @@ def cli_args():
     parser.add_argument('-l', '--last-alive',type=int, help='days then last time was alive', default=30)
     parser.add_argument('-p', '--print-field', type=str, help='object field to print, object json if not set')
     args = parser.parse_args()
+    if not args.get:
+        parser.print_help()
+        exit()
     return args
 
 
