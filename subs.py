@@ -127,6 +127,7 @@ def stale_probes(db_collection, scan_field, interval_days, alive_in_days, exclud
     now = datetime.now()
     q = {
         "last_alive": {"$gte": now - timedelta(days=alive_in_days)},
+        "scope": {"$in": [s["name"] for s in scopes]},
         "$or": [
             {scan_field: {"$exists": False}},
             {scan_field: {"$lt": now - timedelta(days=interval_days)}},

@@ -38,7 +38,10 @@ if __name__ == "__main__":
     )
 
     ndaysago = datetime.datetime.now() - datetime.timedelta(days=config['fullscan']['host_alive_in_days'])
-    q = {"last_alive": {"$gte": ndaysago}}
+    q = {
+        "last_alive": {"$gte": ndaysago},
+        "scope": {"$in": [s["name"] for s in scopes]},
+    }
 
     db_res = db['http_probes'].find(q)
 
