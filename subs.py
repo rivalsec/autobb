@@ -570,8 +570,6 @@ def main_gc():
 if __name__ == "__main__":
     args = cli_args()
     try:
-        os.makedirs(glob.httprobes_savedir, exist_ok=True)
-        os.makedirs(glob.tmp_dir, exist_ok=True)
         main()
         main_gc()
     except Exception as x:

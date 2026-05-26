@@ -44,6 +44,8 @@ class Globals:
         self.fuzz_savedir = f"{runtime_root}/ffuf/{ts_now}"
         self.tmp_dir = f"{runtime_root}/tmp/{ts_now}"
         self.harvested_dir = f"harvested/{ts_now}"
+        for d in (self.httprobes_savedir, self.fuzz_savedir, self.tmp_dir, self.harvested_dir):
+            os.makedirs(d, exist_ok=True)
 
 
 with open("config.yaml","r") as config_stream:

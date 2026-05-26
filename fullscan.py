@@ -5,7 +5,6 @@ import logging
 import compare
 import random
 import math
-import os
 
 
 def alert(nuclei_hits, chunk_index, chunks_len):
@@ -28,7 +27,6 @@ def fullscan(hosts):
 
 if __name__ == "__main__":
     from config import config, scopes, db, glob, alerter
-    os.makedirs(glob.tmp_dir, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
