@@ -1,9 +1,10 @@
 import logging
-from subprocess import Popen, PIPE, run, STDOUT
+from subprocess import Popen, PIPE, run, STDOUT, TimeoutExpired
 from config import config, glob, alerter
 import json
 import re
 import os
+from threading import Timer
 from typing import Dict, List
 from utils.common import hit_tostr
 from _thread import start_new_thread
@@ -28,26 +29,38 @@ def nuclei_active(nuclei_cmd_or: List[str], http_probes):
 
     logging.info(" ".join(nuclei_cmd))
     proc = Popen(nuclei_cmd, text=True, bufsize=1, stderr=PIPE, stdout=PIPE, stdin=PIPE, errors="backslashreplace")
-    
+
+    timeout = config['nuclei'].get('scan_timeout') or 0
+    timer = None
+    if timeout:
+        def _kill_on_timeout():
+            logging.warning(f"nuclei scan exceeded {timeout}s, terminating")
+            proc.terminate()
+        timer = Timer(timeout, _kill_on_timeout)
+        timer.start()
+
     start_new_thread(process_errors, (proc.stderr,))
     start_new_thread(stdinwrite, (http_probes, proc.stdin))
 
-    for line in proc.stdout:
-        logging.debug(line.strip())
-        try:
-            p = json.loads(line.strip())
-        except:
-            continue
-        if 'matched-at' not in p:
-            p['matched-at'] = p['url']
-        p_scope = next( (x['scope'] for x in http_probes if x['url'] == p['host']), None )
-        # second attempt domain in url
-        if not p_scope:
-            p_scope = next( (x['scope'] for x in http_probes if p['host'] in x['url']), 'unknown' )
-        p['scope'] = p_scope
-        logging.info(hit_tostr(p))
-        yield p
-
+    try:
+        for line in proc.stdout:
+            logging.debug(line.strip())
+            try:
+                p = json.loads(line.strip())
+            except:
+                continue
+            if 'matched-at' not in p:
+                p['matched-at'] = p['url']
+            p_scope = next( (x['scope'] for x in http_probes if x['url'] == p['host']), None )
+            # second attempt domain in url
+            if not p_scope:
+                p_scope = next( (x['scope'] for x in http_probes if p['host'] in x['url']), 'unknown' )
+            p['scope'] = p_scope
+            logging.info(hit_tostr(p))
+            yield p
+    finally:
+        if timer:
+            timer.cancel()
 
     #check only on all templates scan
     if not '-tags' in nuclei_cmd:

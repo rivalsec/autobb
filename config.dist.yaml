@@ -56,6 +56,7 @@ subfinder:
   ]
 
 nuclei:
+  scan_timeout: 0   # seconds; wall-clock cap on a single nuclei_active run (0 disables)
   exclude_templates: []
   # exclude_templates:
     # - ./nuclei-templates/http/technologies/tech-detect.yaml
@@ -117,7 +118,7 @@ httpfuzz:
   threads: 40                  # ffuf internal threads per process
   parallel: 4                  # ffuf processes to run concurrently across probes
   match_codes: '200,204,301,302,307,401,403,405,500'
-  one_time_max: 200            # max number of new probes fuzzed per run (small_scopes_slice)
+  one_time_max: 200            # max number of new probes fuzzed per run (random sample ceiling)
   paths_weird_threshold: 200   # if a single host yields more matches than this, drop them all (catch-all)
   per_target_timeout: 600      # seconds; abort ffuf for a target if it exceeds this
   prefix_cluster_len: 4        # group hits by first N chars of path for wildcard detection
