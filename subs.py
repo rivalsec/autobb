@@ -148,22 +148,6 @@ def mark_scanned(db_collection, probes, scan_field):
     )
 
 
-def small_scopes_slice(items, scopes, max):
-    """ small scopes at first [][:max]shuffle """
-    out = []
-    out_items = []
-    for scope_name in [x['name'] for x in scopes]:
-        scope_items = [x for x in items if x['scope'] == scope_name]
-        if len(scope_items) > 0:
-            out.append( (scope_name, scope_items) )
-    out.sort( key=lambda x: len(x[1]) )
-    for s in out:
-        out_items.extend(s[1])
-    out_items = out_items[:max]
-    random.shuffle(out_items)
-    return out_items[:max]
-
-
 def sites_equal_filter(sites):
     filter_keys = ['scope', 'status_code', 'title', 'content_length']
     # webserver?, technologies?
@@ -215,9 +199,7 @@ def nuclei_workflow(probes):
     '''slice -> nuclei_active -> dedup hits -> notify -> stamp last_nuclei_scan'''
     if not probes:
         return
-    sliced = small_scopes_slice(probes, scopes, config['nuclei_one_time_max'])
-    if not sliced:
-        return
+    sliced = random.sample(probes, min(len(probes), config['nuclei_one_time_max']))
 
     nuclei_hits = nuclei_active(config['nuclei']['cmd'], sliced)
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
@@ -246,7 +228,7 @@ def httpfuzz_workflow(sites_new):
     if not fuzz_targets:
         return
 
-    fuzz_targets = small_scopes_slice(fuzz_targets, scopes, config['httpfuzz']['one_time_max'])
+    fuzz_targets = random.sample(fuzz_targets, min(len(fuzz_targets), config['httpfuzz']['one_time_max']))
     logging.info(f"httpfuzz on {len(fuzz_targets)} probes")
 
     fuzz_hits = list(httpfuzz(
@@ -504,7 +486,7 @@ def main():
         new_port_probes = []
         if args.ports:
             # otherports
-            port_max = small_scopes_slice(new_scopes_subs, scopes, config['nuclei_one_time_max'])
+            port_max = random.sample(new_scopes_subs, min(len(new_scopes_subs), config['nuclei_one_time_max']))
             port_probes = list(portprobes(port_max, config['naabu']['ports_onnew']))
             port_probes, _ = threshold_filter(port_probes, "host", config['ports_weird_threshold'])
             new_port_probes = db_get_modified(port_probes, db['ports'], ['host','port'], ['host','ip','port','scope'], compare.port )
