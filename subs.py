@@ -256,7 +256,7 @@ def httpfuzz_workflow(sites_new):
     if not paths_new:
         return
 
-    juicer(paths_new, http_paths_validators, scopes, config['juicer_filters'])
+    # juicer(paths_new, http_paths_validators, scopes, config['juicer_filters'])
     notify_by_weight(
         paths_new, "path(s)",
         lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b {x['words']}w {x['lines']}l{(' -> ' + x['redirect']) if x.get('redirect') else ''}{x['juicy_info']}",

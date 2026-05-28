@@ -78,7 +78,7 @@ def threshold_filter(items:Dict[str,Any], item_key:str, threshold:int):
 
 
 def prefix_cluster_filter(items, prefix_len, group_max,
-                          group_keys=('host', 'status_code', 'content_length'),
+                          group_keys=('host', 'status_code', 'words', 'lines'),
                           path_key='path'):
     """Collapse over-sized prefix clusters into a single representative.
 
@@ -86,7 +86,7 @@ def prefix_cluster_filter(items, prefix_len, group_max,
     of the path (case-insensitive, leading slash stripped), if the bucket has
     more than group_max items only the shortest path is kept; the rest are
     returned as 'filtered'. Catches wordlist-style wildcards like
-    admin/administrator/adminpanel all responding with same status+length.
+    admin/administrator/adminpanel all responding with same status+words+lines.
     """
     groups = collections.defaultdict(list)
     for it in items:
