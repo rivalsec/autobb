@@ -119,5 +119,5 @@ def httpfuzz(probes, wordlist: str, threads: int = 40,
                 logging.warning(f"httpfuzz error on {probe.get('url')}: {e}")
                 continue
             for hit in hits:
-                logging.info(f"{hit['scope']}: {hit['full_url']} [{hit['status_code']}] {hit['content_length']}b")
+                logging.info(f"{hit['scope']}: {hit}")
                 yield hit
