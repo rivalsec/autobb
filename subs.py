@@ -241,13 +241,14 @@ def httpfuzz_workflow(sites_new):
         savedir=glob.fuzz_savedir,
     ))
     mark_scanned(db['http_probes'], fuzz_targets, 'last_httpfuzz_scan')
-    fuzz_hits, _ = threshold_filter(fuzz_hits, 'url', config['httpfuzz']['paths_weird_threshold'])
+
     fuzz_hits, _ = prefix_cluster_filter(
         fuzz_hits,
         config['httpfuzz']['prefix_cluster_len'],
         config['httpfuzz']['prefix_cluster_max'],
     )
-
+    fuzz_hits, _ = threshold_filter(fuzz_hits, 'url', config['httpfuzz']['paths_weird_threshold'])
+    
     up_fields = ['url','host','path','status_code','content_length','words','lines','redirect','scope']
     index_fields = ['url','path']
     paths_new = list(db_get_modified(fuzz_hits, db['http_paths'], index_fields, up_fields, compare.http_path))
@@ -258,7 +259,7 @@ def httpfuzz_workflow(sites_new):
     juicer(paths_new, http_paths_validators, scopes, config['juicer_filters'])
     notify_by_weight(
         paths_new, "path(s)",
-        lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b{x['juicy_info']}",
+        lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b {x['words']}w {x['lines']}l{(' -> ' + x['redirect']) if x.get('redirect') else ''}{x['juicy_info']}",
         source="http_path",
     )
 
