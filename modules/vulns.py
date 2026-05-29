@@ -65,7 +65,7 @@ def nuclei_active(nuclei_cmd_or: List[str], http_probes):
 
     #check only on all templates scan
     if not '-tags' in nuclei_cmd:
-        nuclei_check_templates_count(nuclei_stderr)
+        nuclei_check_templates_count(nuclei_stderr, nuclei_cmd)
 
 
 def stdinwrite(http_probes, stdin):
@@ -98,7 +98,7 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
         nuclei_cmd.extend(['-et', t])
     logging.info(" ".join(nuclei_cmd))
     nuclei_res = run(nuclei_cmd, text=True, stderr=PIPE, stdout=PIPE)
-    nuclei_check_templates_count(nuclei_res.stderr)
+    nuclei_check_templates_count(nuclei_res.stderr, nuclei_cmd)
     logging.info(nuclei_res.stderr)
     logging.info(nuclei_res.stdout)
     nuclei_hits = [json.loads(x) for x in nuclei_res.stdout.splitlines()]
@@ -110,8 +110,13 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
     return nuclei_hits
 
 
-def nuclei_check_templates_count(nuclei_res_stderr):
+def nuclei_check_templates_count(nuclei_res_stderr, nuclei_cmd=None):
     ''' Templates loaded for scan: 507 '''
+    # -silent suppresses the "Templates loaded for current scan" stats line,
+    # so the count can't be parsed — skip the check to avoid a false alert.
+    if nuclei_cmd and '-silent' in nuclei_cmd:
+        logging.info("nuclei templates check skipped (-silent)")
+        return None
     templates_loaded = None
     templates_invalid = 0
     m = re.search(r"Templates loaded for current scan: (\d+)", nuclei_res_stderr)
