@@ -50,12 +50,12 @@ db:
   database: 'autobbdb'
 
 # Single source of truth for User-Agent and custom headers.
-# Applied to every HTTP-making tool: httpx, nuclei (active/passive), ffuf.
+# Applied to every HTTP-making tool: httpx, nuclei, ffuf.
 http_headers:
   user_agent: ''   # e.g. 'autobb-recon (bugbounty)'
   custom: []       # extra headers in "Name: Value" form
   # custom:
-  #   - 'X-Bug-Bounty: rival'
+  #   - 'X-Bug-Bounty: rivalsec'
 
 subfinder:
   cmd: [
