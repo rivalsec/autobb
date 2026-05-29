@@ -53,6 +53,21 @@ with open("config.yaml","r") as config_stream:
 
 scopes = load_scopes()
 
+
+def http_header_args():
+    '''Single source of truth for User-Agent / custom headers shared by all
+    HTTP-making tools (httpx, nuclei, ffuf). Returns a list of CLI args
+    (`-H "Name: Value"`) that each tool appends to its command.'''
+    cfg = config.get('http_headers') or {}
+    args = []
+    ua = cfg.get('user_agent')
+    if ua:
+        args += ['-H', f'User-Agent: {ua}']
+    for h in cfg.get('custom') or []:
+        if h:
+            args += ['-H', h]
+    return args
+
 mongodb_client = MongoClient(config['db']['conn_str'])
 db = mongodb_client[config['db']['database']]
 ensure_indexes(db)

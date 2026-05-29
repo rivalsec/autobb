@@ -7,7 +7,7 @@ from subprocess import Popen, PIPE, TimeoutExpired
 from urllib.parse import urlsplit
 from typing import Dict, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from config import config
+from config import config, http_header_args
 
 
 def _fuzz_one(probe: Dict, wordlist: str, threads: int, match_codes: str, timeout: int,
@@ -28,6 +28,7 @@ def _fuzz_one(probe: Dict, wordlist: str, threads: int, match_codes: str, timeou
         '-of', 'json',
         '-o', tmp_path,
     ])
+    cmd.extend(http_header_args())
     if savedir:
         # per-probe subdir so parallel ffuf workers don't collide
         slug = hashlib.md5(base_url.encode('utf-8', 'replace')).hexdigest()[:12]

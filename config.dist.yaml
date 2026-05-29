@@ -49,7 +49,15 @@ db:
   conn_str: 'mongodb://bbmongodb:27017'
   database: 'autobbdb'
 
-subfinder: 
+# Single source of truth for User-Agent and custom headers.
+# Applied to every HTTP-making tool: httpx, nuclei (active/passive), ffuf.
+http_headers:
+  user_agent: ''   # e.g. 'autobb-recon (bugbounty)'
+  custom: []       # extra headers in "Name: Value" form
+  # custom:
+  #   - 'X-Bug-Bounty: rival'
+
+subfinder:
   cmd: [
     'subfinder',
     # '-config', './subfinder_config.yaml'

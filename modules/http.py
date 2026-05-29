@@ -2,7 +2,7 @@ import logging
 from typing import List
 from subprocess import Popen, PIPE
 import json
-from config import config
+from config import config, http_header_args
 from _thread import start_new_thread
 
 
@@ -29,6 +29,7 @@ def httprobes(domains:List[str], threads=20, savedir = False):
     '''
     httpx_cmd = config["httpx"]["cmd"].copy()
     httpx_cmd.extend(['-threads', str(threads)])
+    httpx_cmd.extend(http_header_args())
     if savedir:
         httpx_cmd.extend(['-sr', '-srd', savedir])
 

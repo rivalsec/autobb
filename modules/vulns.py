@@ -1,6 +1,6 @@
 import logging
 from subprocess import Popen, PIPE, run, STDOUT, TimeoutExpired
-from config import config, glob, alerter
+from config import config, glob, alerter, http_header_args
 import json
 import re
 import os
@@ -24,6 +24,7 @@ def process_errors(stderr):
 def nuclei_active(nuclei_cmd_or: List[str], http_probes):
     nuclei_update()
     nuclei_cmd = nuclei_cmd_or.copy()
+    nuclei_cmd.extend(http_header_args())
     for t in config['nuclei']['exclude_templates']:
         nuclei_cmd.extend(['-et', t])
 
@@ -92,6 +93,7 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
         nuclei_cmd = config['nuclei']['passive_cmd'].copy()
 
     nuclei_cmd.extend(['-target', probes_dir])
+    nuclei_cmd.extend(http_header_args())
     for t in config['nuclei']['exclude_templates']:
         nuclei_cmd.extend(['-et', t])
     logging.info(" ".join(nuclei_cmd))
