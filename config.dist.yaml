@@ -123,6 +123,7 @@ httpfuzz:
   per_target_timeout: 600      # seconds; abort ffuf for a target if it exceeds this
   prefix_cluster_len: 4        # group hits by first N chars of path for wildcard detection
   prefix_cluster_max: 5        # if (host,status,length,prefix) cluster exceeds this, keep only shortest path
+  scope_equal_max: 5           # drop all paths in a (scope,status,words,lines) bucket larger than this
 
 rescan:
   nuclei_interval_days: 14      # 0 disables periodic nuclei rescan

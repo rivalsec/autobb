@@ -19,7 +19,7 @@ from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
 from modules.txt_harvester import harvest_savedir
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
-from utils.common import uniq_list, file_lines_count, hit_tostr, prefix_cluster_filter
+from utils.common import uniq_list, file_lines_count, hit_tostr, prefix_cluster_filter, scope_equal_filter
 from config import config, scopes, db, glob, alerter
 
 
@@ -247,6 +247,7 @@ def httpfuzz_workflow(sites_new):
         config['httpfuzz']['prefix_cluster_len'],
         config['httpfuzz']['prefix_cluster_max'],
     )
+    fuzz_hits, _ = scope_equal_filter(fuzz_hits, config['httpfuzz']['scope_equal_max'])
     fuzz_hits, _ = threshold_filter(fuzz_hits, 'url', config['httpfuzz']['paths_weird_threshold'])
     
     up_fields = ['url','host','path','status_code','content_length','words','lines','redirect','scope']

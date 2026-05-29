@@ -110,6 +110,24 @@ def prefix_cluster_filter(items, prefix_len, group_max,
     return keep, filtred
 
 
+def scope_equal_filter(items, threshold, keys=('scope', 'status_code', 'words', 'lines')):
+    """Drop whole buckets of paths sharing (scope, status_code, words, lines)
+    when a bucket exceeds `threshold`. Catches scope-wide generic responses (e.g.
+    a soft-404 served identically across many hosts/paths). Drops every item in
+    an oversized bucket (no representative kept), like threshold_filter."""
+    groups = collections.defaultdict(list)
+    for it in items:
+        groups[tuple(it.get(k) for k in keys)].append(it)
+    keep, filtred = [], []
+    for bucket, bucket_items in groups.items():
+        if len(bucket_items) > threshold:
+            filtred.extend(bucket_items)
+            logging.info(f"scope-equal bucket {bucket} size {len(bucket_items)} dropped")
+        else:
+            keep.extend(bucket_items)
+    return keep, filtred
+
+
 def scope_update(arr, scope_name):
     for item in arr:
         item['scope'] = scope_name

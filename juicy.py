@@ -83,23 +83,29 @@ def probe_unusual_ports(http_probe, scopes, filters, weight = 20):
         return f" !port:{http_probe['port']}", weight
 
 
-PATH_JUICY_RE = re.compile(
-    r'(admin|backup|\.git|\.env|\.bak|\.sql|\.swp|debug|swagger|actuator|phpinfo|console|metrics|wp-admin|graphql|\.aws|\.ssh|id_rsa)',
-    re.IGNORECASE
-)
-
-
-def path_juicy_keyword(http_path, scopes, filters, weight = 10):
-    """match juicy substrings in path"""
-    path = http_path.get('path', '')
-    if PATH_JUICY_RE.search(path):
-        return f" !key:{path}", weight
-
-
 def path_unusual_status(http_path, scopes, filters, weight = 2):
     """401/403/500 are interesting (auth-protected / errored)"""
     if http_path.get('status_code') in (401, 403, 500):
         return f" !s{http_path['status_code']}", weight
+
+
+def path_status_200(http_path, scopes, filters, weight = 5):
+    """200 OK on a fuzzed path = a real resource was found."""
+    if http_path.get('status_code') == 200:
+        return " !s200", weight
+
+
+def path_4xx_to_200(http_path, scopes, filters, weight = 10):
+    """status_code flipped from 4xx (forbidden/missing) to 200 -> newly exposed."""
+    if http_path.get('status_code') != 200:
+        return
+    prior = list(http_path.get('_diffs_history', []))
+    if 'diffs' in http_path:               # transient diff present only in live runs
+        prior.append(http_path['diffs'])
+    for diff in prior:
+        old = diff.get('status_code')
+        if isinstance(old, int) and 400 <= old < 500:
+            return " !4xx>200", weight
 
 
 def juicer(items, validators, scopes, filters):
@@ -117,7 +123,7 @@ def juicer(items, validators, scopes, filters):
 # validators
 domain_validators = [domain_cname_notinscope,have_diffs]
 http_probes_validators = [probe_unusual_ports, probe_cert_notinscope, probe_cname_404, probe_unusual404title, probe_location_notinscope, have_diffs]
-http_paths_validators = [path_juicy_keyword, path_unusual_status, have_diffs]
+http_paths_validators = [path_unusual_status, path_status_200, path_4xx_to_200, have_diffs]
 
 
 if __name__=="__main__":
