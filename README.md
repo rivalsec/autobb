@@ -1,7 +1,5 @@
 # AutoBB
 
-[English](README.md) | [Русский](README_RU.md)
-
 **Continuous external attack surface monitoring & vulnerability automation — self-hosted, runs continuously in Docker.**
 
 AutoBB discovers your internet-facing assets, tracks how they change over time, scores findings by risk, scans them for vulnerabilities, and alerts you on anything new. It keeps a persistent asset inventory in MongoDB and re-checks it on a schedule, so it's a continuous monitor — not a one-shot recon script. Built for **bug bounty hunters** (be first to a new or changed asset on a large program) and **security teams / companies** (know your external attack surface and get alerted the moment it shifts).
@@ -41,6 +39,19 @@ Core loop: *discover assets → track changes → score risk → scan for vulns 
 - Continuous Nuclei vulnerability monitoring across all known assets.
 - Fully self-hosted — data never leaves your infrastructure.
 - Identifiable scan traffic via custom headers, and considerate-by-default scanning that won't overload production hosts (tunable up when you want speed).
+
+## Web UI
+
+A companion **read-only** web dashboard — [rivalsec/autobb-webui](https://github.com/rivalsec/autobb-webui) — visualizes everything AutoBB writes to MongoDB: the asset inventory (domains, HTTP services, ports, paths), vulnerability findings with severity filtering, per-host drilldown, and alert history. It only reads — AutoBB stays the sole writer — and is built on FastAPI + React, with optional token auth.
+
+Quick demo (spins up the UI against a sample dataset):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/rivalsec/autobb-webui/main/demo/docker-compose.yml | docker compose -f - -p autobb-demo up
+# then open http://127.0.0.1:8000
+```
+
+To point it at your own data, set `MONGO_URI` / `MONGO_DB` (use read-only MongoDB credentials and keep it bound to loopback). See the [autobb-webui](https://github.com/rivalsec/autobb-webui) repo for full setup.
 
 ## Architecture
 
