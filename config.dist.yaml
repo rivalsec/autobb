@@ -73,8 +73,8 @@ nuclei:
     'nuclei', '-no-color', '-jsonl',
     #'-t', "./nuclei-my-templates",
     '-t', './nuclei-templates',
-    '-bulk-size', '50',
-    '-concurrency', '4',
+    '-bulk-size', '100',
+    '-concurrency', '1',   # one template at a time across many hosts -> gentle per host, load spread across assets
   ]
   # network templates on ports without http(s)
   network_cmd: [
@@ -123,8 +123,8 @@ httpfuzz:
     '-timeout', '10',
   ]   # -of/-o are added by the module (writes to a tempfile)
   wordlist: 'example/dirs-common.txt'
-  threads: 40                  # ffuf internal threads per process
-  parallel: 4                  # ffuf processes to run concurrently across probes
+  threads: 1                   # ffuf internal threads per process (1 = one request at a time per target; raise for speed)
+  parallel: 100                  # ffuf processes to run concurrently across probes
   match_codes: '200,204,301,302,307,401,403,405,500'
   one_time_max: 200            # max number of new probes fuzzed per run (random sample ceiling)
   paths_weird_threshold: 200   # if a single host yields more matches than this, drop them all (catch-all)

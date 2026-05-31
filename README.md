@@ -1,6 +1,46 @@
 # AutoBB
 
-Bug bounty automation pipeline. Discovers subdomains, probes HTTP services, scans ports, and runs nuclei vulnerability checks across configured scopes. Tracks asset changes in MongoDB and sends alerts on new findings.
+[English](README.md) | [Русский](README_RU.md)
+
+**Continuous external attack surface monitoring & vulnerability automation — self-hosted, runs continuously in Docker.**
+
+AutoBB discovers your internet-facing assets, tracks how they change over time, scores findings by risk, scans them for vulnerabilities, and alerts you on anything new. It keeps a persistent asset inventory in MongoDB and re-checks it on a schedule, so it's a continuous monitor — not a one-shot recon script. Built for **bug bounty hunters** (be first to a new or changed asset on a large program) and **security teams / companies** (know your external attack surface and get alerted the moment it shifts).
+
+Core loop: *discover assets → track changes → score risk → scan for vulns → alert.*
+
+## What it does
+
+- **Continuous asset discovery** — passive OSINT (subfinder), DNS brute-force (puredns), permutations (dnsgen), and resolution (dnsx) to find subdomains and live hosts.
+- **Persistent asset inventory** — every domain, HTTP service, open port, and finding is stored in MongoDB (`domains`, `http_probes`, `ports`, `nuclei_hits`, `nuclei_passive_hits`, `http_paths`).
+- **Change detection** — diffs each scan against the last and records a per-field diff history, so you're alerted on real changes and not re-alerted on oscillating values (e.g. rotating CDN CNAMEs).
+- **Risk scoring ("juicy")** — surfaces the interesting findings first: out-of-scope CNAMEs/certs, services on non-80/443 ports, external redirects, fuzzed paths that flipped `4xx → 200`, and more.
+- **Vulnerability scanning** — Nuclei in active, passive (against saved responses), and network-template modes.
+- **Content discovery** — directory/file bruteforce (ffuf) on newly discovered alive HTTP services.
+- **Scheduled rescans / continuous mode** — configurable rescan intervals plus `--workflow-olds` / `--ports-olds` to re-probe known assets; designed to run continuously in Docker.
+- **Multi-channel alerts** — Telegram, SMTP, and VK Teams, with automatic large-message attachment fallback.
+- **Considerate scanning, spread across assets** — AutoBB is built to avoid harming the assets it touches by distributing each scan across many targets in a single run, rather than concentrating load on any one host or name server:
+  - **Subdomain brute-force** resolves names for *all scopes together in one shuffled, volume-capped run*, so DNS queries don't overflow any single authoritative name server (rate-limited via puredns).
+  - **HTTP probing** runs across all scopes' hosts from one shared pool — any single host sees roughly one request.
+  - **Port scanning** is rate-limited and skips CDN ranges.
+  - **Vuln & content scanning** stay gentle per host by default: ffuf uses **1 thread per target** and Nuclei runs **one template at a time across many hosts** (`-c 1 -bs 100`), so each host gets one request at a time while the scan spreads across the host set.
+
+  Every concurrency/rate knob is tunable — turn it up for speed when a target can take it.
+- **Identifiable, self-hosted scanning** — set a single User-Agent / custom headers (e.g. `X-Bug-Bounty`) applied to every tool, and keep all collected data in your own infrastructure.
+
+## Who it's for
+
+**Bug bounty hunters**
+- Continuously monitor large programs instead of re-running recon by hand.
+- Get pinged the moment a new or changed asset appears — be first to it.
+- Risk scoring surfaces the juicy targets so you don't dig through noise.
+- No infra babysitting: it runs on its own in Docker and alerts you.
+
+**Security teams & companies**
+- Know your internet-facing attack surface (EASM) and catch shadow IT / forgotten subdomains.
+- Get alerted on new exposures and changes as they happen.
+- Continuous Nuclei vulnerability monitoring across all known assets.
+- Fully self-hosted — data never leaves your infrastructure.
+- Identifiable scan traffic via custom headers, and considerate-by-default scanning that won't overload production hosts (tunable up when you want speed).
 
 ## Architecture
 
