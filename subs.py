@@ -346,7 +346,7 @@ def secrets_workflow(savedirs, all_probes):
 
     skeys = ['critical', 'high', 'medium', 'low', 'unknown', 'info']
     new_hits.sort(key=lambda h: skeys.index(h['severity']) if h['severity'] in skeys else len(skeys))
-    lines = [f"{h['scope']}: {h['host']} [{h['severity']}] [{h['rule_id']}] {h['secret']} {h['url']}" for h in new_hits]
+    lines = [f"{h['scope']}: {h['url']} [{h['severity']}] [{h['rule_id']}] {h['match']} " for h in new_hits]
     alerter.notify(notify_block(f"+{len(new_hits)} secret(s).", lines), source="secrets", items=new_hits)
 
 
