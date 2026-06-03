@@ -116,7 +116,8 @@ def subdomains_gen(domain, oldsubs, wordlist=None, alts_max=200000, alts_wordlen
                 files += 1
         if harvested_list:
             combined_oldsubs.extend(harvested_list)
-            logging.info(f"{domain} +{len(harvested_list)} from harvested subs ({files} files in {harv_root}/)")
+            harv_inscope = len(list(filter(subf, harvested_list)))
+            logging.info(f"{domain} +{harv_inscope} from harvested subs ({len(harvested_list)} total, {files} files in {harv_root}/)")
 
     subs.add(domain)
     subs.update(filter(subf, combined_oldsubs))
