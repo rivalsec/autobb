@@ -31,6 +31,10 @@ INDEXES = {
         ([('template-id', 1), ('matcher-name', 1), ('host', 1)], {'unique': True}),
         ([('scope', 1)], {}),
     ],
+    'secret_hits': [
+        ([('scope', 1), ('host', 1), ('rule_id', 1), ('secret_sha256', 1)], {'unique': True}),
+        ([('scope', 1)], {}),
+    ],
     'alerts': [
         ([('created_at', 1)], {}),
         ([('source', 1), ('created_at', 1)], {}),

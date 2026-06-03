@@ -30,6 +30,11 @@ def port(new, old, compare_history = False):
     return {'equal':True, 'diffs':{}}
 
 
+def secret_hit(new, old, compare_history = False):
+    """Never re-alert: dedup is the (scope,host,rule_id,secret_sha256) index key."""
+    return {'equal':True, 'diffs':{}}
+
+
 def http_path(new, old, compare_history = False):
     """
     fuzz hits: alert again only on status_code change

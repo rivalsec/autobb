@@ -138,6 +138,31 @@ rescan:
   httpfuzz_interval_days: 30    # 0 disables periodic httpfuzz rescan
   host_alive_in_days: 7         # only rescan probes seen alive within this window
 
+# Passive secret scan of saved httpx/ffuf response bodies (gitleaks). --secrets flag.
+secrets:
+  cmd: ['gitleaks', 'dir', '--no-banner', '-f', 'json']  # target + '-r <out>' appended by the module
+  # config: './autobb-secrets.toml'   # optional custom ruleset (future tuning); -> gitleaks -c <file>
+  filter: []            # regexes to drop noisy rule_ids / matches / urls
+  weird_threshold: 50   # drop all hits from a single host above this (catch-all); 0 disables
+  # severity per gitleaks RuleID (default applies to any rule not listed). gitleaks
+  # has no native severity — this is our own policy used to sort/label alerts.
+  severity:
+    default: medium
+    critical:
+      - private-key
+      - aws-access-token
+      - gcp-api-key
+    high:
+      - github-pat
+      - github-fine-grained-pat
+      - gitlab-pat
+      - slack-bot-token
+      - stripe-access-token
+      - telegram-bot-api-token
+      - jwt
+    low:
+      - generic-api-key   # noisy: also matches public reCAPTCHA/site keys
+
 wordlist: 'example/subdomains-top1million-5000.txt'
 httprobes_history: 5
 sub_domains_weird_threshold: 7000

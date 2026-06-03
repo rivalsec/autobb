@@ -11,12 +11,14 @@ import compare
 import math
 import ipaddress
 import traceback
+from urllib.parse import urlsplit
 from juicy import juicer, http_probes_validators, domain_validators, http_paths_validators
 from modules.domain import dnsx, domain_purespray, extract_prefixes
 from modules.http import httprobes
 from modules.httpfuzz import httpfuzz
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
+from modules.secrets import secrets_scan
 from modules.txt_harvester import harvest_savedir
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
 from utils.common import uniq_list, file_lines_count, hit_tostr, prefix_cluster_filter, scope_equal_filter
@@ -51,6 +53,7 @@ def cli_args():
     parser.add_argument('--nuclei', action='store_true', help='nuclei tests on new')
     parser.add_argument('--passive', action='store_true', help='passive nuclei checks')
     parser.add_argument('--http-fuzz', action='store_true', help='bruteforce dirs/files on new alive http probes (ffuf)')
+    parser.add_argument('--secrets', action='store_true', help='passive secret scan of saved httpx/ffuf responses (gitleaks)')
     parser.add_argument('--no-subfinder', action='store_true', help='skip the subfinder step in subdomain generation')
     args = parser.parse_args()
     return args
@@ -306,6 +309,47 @@ def passive_workflow(all_http_probes):
         )
 
 
+def secrets_workflow(savedirs, all_probes):
+    '''gitleaks secret scan over saved httpx/ffuf response bodies -> dedup -> notify'''
+    # host -> scheme from the httpx probes, so reconstructed ffuf URLs get the
+    # right scheme (prefer https when a host has both)
+    host_scheme = {}
+    for p in all_probes:
+        parts = urlsplit(p.get('url', ''))
+        h = (parts.hostname or '').lower()
+        if h and (h not in host_scheme or parts.scheme == 'https'):
+            host_scheme[h] = parts.scheme or 'https'
+
+    hits = secrets_scan(savedirs, glob.tmp_dir + '/secrets_bodies', host_scheme)
+    if not hits:
+        return
+    # scope per host (mirror nuclei_passive host->scope mapping)
+    for h in hits:
+        h['scope'] = next((x['scope'] for x in all_probes if h['host'] and '//' + h['host'] in x['url']), 'unknown')
+    # allowlist filter on rule_id / match / url
+    filters = config['secrets'].get('filter', [])
+    if filters:
+        hits = [h for h in hits
+                if not any(re.search(rx, f"{h['rule_id']} {h['match']} {h['url']}") for rx in filters)]
+    # per-host catch-all suppression (0/None disables)
+    if config['secrets'].get('weird_threshold'):
+        hits, _ = threshold_filter(hits, 'host', config['secrets']['weird_threshold'])
+    if not hits:
+        return
+
+    up_fields = ['scope','host','rule_id','severity','description','secret','secret_sha256','match','line','file','url']
+    index_fields = ['scope','host','rule_id','secret_sha256']
+    new_hits = list(db_get_modified(hits, db['secret_hits'], index_fields, up_fields, compare.secret_hit))
+    logging.info(f"{len(new_hits)} new secret(s) found")
+    if not new_hits:
+        return
+
+    skeys = ['critical', 'high', 'medium', 'low', 'unknown', 'info']
+    new_hits.sort(key=lambda h: skeys.index(h['severity']) if h['severity'] in skeys else len(skeys))
+    lines = [f"{h['scope']}: {h['host']} [{h['severity']}] [{h['rule_id']}] {h['secret']} {h['url']}" for h in new_hits]
+    alerter.notify(notify_block(f"+{len(new_hits)} secret(s).", lines), source="secrets", items=new_hits)
+
+
 def notify_ports(port_probes):
     notify_lines = []
     uniq_ips =  set([x['ip'] for x in port_probes])
@@ -532,6 +576,13 @@ def main():
         project = {"url": 1, "input": 1, "scope": 1}
         #http_probes include ports too
         passive_workflow( list(db['http_probes'].find(q, project)) )
+
+    # gitleaks secret scan over saved http response bodies (httpx + ffuf)
+    if args.secrets:
+        logging.info("gitleaks secret scan on saved responses")
+        q = {"scope": {"$in": [s["name"] for s in scopes]}}
+        all_probes = list(db['http_probes'].find(q, {"url": 1, "scope": 1}))
+        secrets_workflow([glob.httprobes_savedir, glob.fuzz_savedir], all_probes)
 
     # harvest in-scope hosts/URLs from saved http response files (httpx + ffuf)
     harvest_savedir([glob.httprobes_savedir, glob.fuzz_savedir], glob.harvested_dir)
