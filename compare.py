@@ -22,7 +22,7 @@ def http_probe(new, old, compare_history = False):
     'status_code','title','cnames'??,'tls-grab.fingerprint_sha256'
     """
     compare_fields = ['status_code','title','cnames.0','tls-grab.common_name.0']
-    field_res = field_comparer(new,old, compare_fields, [tld_isequal_comp], compare_history)
+    field_res = field_comparer(new,old, compare_fields, [tld_isequal_comp, redirect_title_isequal_comp], compare_history)
     return field_res
 
 
@@ -45,6 +45,19 @@ def http_path(new, old, compare_history = False):
 
 def list_to_dict(l):
     return dict([ (str(i),v) for i,v in enumerate(l)])
+
+
+def redirect_title_isequal_comp(field_name, new_val, old_val):
+    """'Redirecting to <url>' titles carry volatile query params (oauth
+    nonce/state, csrf tokens) that change on every probe. Treat as equal
+    when the destination url is the same once its query string is dropped."""
+    if field_name != 'title' or not new_val or not old_val:
+        return False
+    prefix = 'Redirecting to '
+    if not (new_val.startswith(prefix) and old_val.startswith(prefix)):
+        return False
+    base = lambda t: t[len(prefix):].split('?', 1)[0]
+    return base(new_val) == base(old_val)
 
 
 def tld_isequal_comp(field_name, new_val, old_val, fields = ['tls-grab.common_name.0','cnames.0','cname.0']):
