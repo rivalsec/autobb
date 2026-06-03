@@ -4,6 +4,7 @@ nuclei-my-templates/
 __pycache__/
 venv/
 config.yaml
+autobb-secrets.toml
 scopes.yaml
 httprobes/
 ffuf/
