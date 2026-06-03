@@ -39,13 +39,41 @@ class Globals:
         # ephemeral run-time dirs (kept off the mount so files don't end up
         # owned by container-root on the host); harvested/ stays on cwd to
         # persist via the bind mount.
+        # Paths are materialized lazily on first access (see _lazy_dir) so that
+        # scripts which merely `import config` (export.py, juicy.py, fullscan.py,
+        # tests) don't litter empty timestamped dirs they never write to.
         runtime_root = os.environ.get('AUTOBB_RUNTIME_DIR', '.')
-        self.httprobes_savedir = f"{runtime_root}/httprobes/{ts_now}"
-        self.fuzz_savedir = f"{runtime_root}/ffuf/{ts_now}"
-        self.tmp_dir = f"{runtime_root}/tmp/{ts_now}"
-        self.harvested_dir = f"harvested/{ts_now}"
-        for d in (self.httprobes_savedir, self.fuzz_savedir, self.tmp_dir, self.harvested_dir):
-            os.makedirs(d, exist_ok=True)
+        self._dir_paths = {
+            'httprobes_savedir': f"{runtime_root}/httprobes/{ts_now}",
+            'fuzz_savedir': f"{runtime_root}/ffuf/{ts_now}",
+            'tmp_dir': f"{runtime_root}/tmp/{ts_now}",
+            'harvested_dir': f"harvested/{ts_now}",
+        }
+        self._dirs_created = set()
+
+    def _lazy_dir(self, key: str) -> str:
+        '''Return the path for `key`, creating the directory on first access.'''
+        path = self._dir_paths[key]
+        if key not in self._dirs_created:
+            os.makedirs(path, exist_ok=True)
+            self._dirs_created.add(key)
+        return path
+
+    @property
+    def httprobes_savedir(self) -> str:
+        return self._lazy_dir('httprobes_savedir')
+
+    @property
+    def fuzz_savedir(self) -> str:
+        return self._lazy_dir('fuzz_savedir')
+
+    @property
+    def tmp_dir(self) -> str:
+        return self._lazy_dir('tmp_dir')
+
+    @property
+    def harvested_dir(self) -> str:
+        return self._lazy_dir('harvested_dir')
 
 
 with open("config.yaml","r") as config_stream:
