@@ -9,11 +9,12 @@ Core loop: *discover assets → track changes → score risk → scan for vulns 
 ## What it does
 
 - **Continuous asset discovery** — passive OSINT (subfinder), DNS brute-force (puredns), permutations (dnsgen), and resolution (dnsx) to find subdomains and live hosts.
-- **Persistent asset inventory** — every domain, HTTP service, open port, and finding is stored in MongoDB (`domains`, `http_probes`, `ports`, `nuclei_hits`, `nuclei_passive_hits`, `http_paths`).
+- **Persistent asset inventory** — every domain, HTTP service, open port, and finding is stored in MongoDB (`domains`, `http_probes`, `ports`, `nuclei_hits`, `nuclei_passive_hits`, `http_paths`, `secret_hits`).
 - **Change detection** — diffs each scan against the last and records a per-field diff history, so you're alerted on real changes and not re-alerted on oscillating values (e.g. rotating CDN CNAMEs).
 - **Risk scoring ("juicy")** — surfaces the interesting findings first: out-of-scope CNAMEs/certs, services on non-80/443 ports, external redirects, fuzzed paths that flipped `4xx → 200`, and more.
 - **Vulnerability scanning** — Nuclei in active, passive (against saved responses), and network-template modes.
 - **Content discovery** — directory/file bruteforce (ffuf) on newly discovered alive HTTP services.
+- **Secret scanning** — passive scan (gitleaks) over the response bodies AutoBB already saved from httpx/ffuf, so no extra requests are sent to targets. Findings are deduplicated, mapped back to their source URL/host, and labelled with a configurable severity policy (gitleaks has no native severity).
 - **Scheduled rescans / continuous mode** — configurable rescan intervals plus `--workflow-olds` / `--ports-olds` to re-probe known assets; designed to run continuously in Docker.
 - **Multi-channel alerts** — Telegram, SMTP, and VK Teams, with automatic large-message attachment fallback.
 - **Considerate scanning, spread across assets** — AutoBB is built to avoid harming the assets it touches by distributing each scan across many targets in a single run, rather than concentrating load on any one host or name server:
@@ -72,7 +73,7 @@ modules/
 
 ### Tools (bundled in Docker image)
 
-subfinder, shuffledns, puredns, massdns, dnsx, dnsgen, httpx, naabu, nuclei, chromium
+subfinder, shuffledns, puredns, massdns, dnsx, dnsgen, httpx, naabu, nuclei, ffuf, gitleaks, chromium
 
 ## Quick start
 
@@ -139,6 +140,7 @@ docker run --rm -v $(pwd):/autobb --net autobbnet autobb [FLAGS]
 | `--nuclei` | Run nuclei templates on new findings |
 | `--passive` | Run passive nuclei checks |
 | `--http-fuzz` | Bruteforce dirs/files (ffuf) on new alive HTTP probes |
+| `--secrets` | Passive secret scan (gitleaks) of saved httpx/ffuf responses |
 | `--no-subfinder` | Skip the subfinder (passive OSINT) step in subdomain enumeration |
 
 All flags are optional. The default Docker CMD enables every flag except `--no-subfinder`.
@@ -252,6 +254,32 @@ nuclei:
   cmd: ['nuclei', '-no-color', '-jsonl', '-t', './nuclei-templates', '-t', './nuclei-my-templates']
   exclude_templates:
     - ./nuclei-templates/http/technologies/tech-detect.yaml
+```
+
+### Secrets
+
+Passive secret scanning runs gitleaks over the HTTP response bodies already saved by httpx/ffuf (request headers are stripped first, so your own custom headers are never matched). gitleaks has no native severity, so AutoBB applies its own `severity` policy to sort and label alerts.
+
+```yaml
+secrets:
+  cmd: ['gitleaks', 'dir', '--no-banner', '-f', 'json']
+  # config: './autobb-secrets.toml'   # optional custom gitleaks ruleset (-> gitleaks -c <file>)
+  filter: []            # regexes to drop noisy rule_ids / matches / urls
+  weird_threshold: 50   # drop all hits from a single host above this (0 disables)
+  severity:
+    default: medium     # applied to any rule_id not listed below
+    critical:
+      - private-key
+      - aws-access-token
+      - gcp-api-key
+    high:
+      - github-pat
+      - slack-bot-token
+      - stripe-access-token
+      - telegram-bot-api-token
+      - jwt
+    low:
+      - generic-api-key   # noisy: also matches public reCAPTCHA/site keys
 ```
 
 ### Alert filters
