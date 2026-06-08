@@ -11,9 +11,10 @@ import hashlib
 import json
 import logging
 import os
+import re
 import tempfile
 from subprocess import run, PIPE
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from config import config
 from modules.txt_harvester import _split_file
@@ -31,6 +32,54 @@ def severity_for(rule_id: str) -> str:
         if rule_id in (rules or []):
             return level
     return sev_cfg.get('default', 'unknown')
+
+
+def _compact(text: str) -> str:
+    return re.sub(r'\s+', ' ', text or '').strip()
+
+
+def _canonical_url(url: str) -> str:
+    """Keep the response location stable across cache-buster/query changes."""
+    parts = urlsplit(url or '')
+    if not parts.scheme and not parts.netloc:
+        return (url or '').split('?', 1)[0].split('#', 1)[0]
+    return urlunsplit((
+        parts.scheme.lower(),
+        parts.netloc.lower(),
+        parts.path or '/',
+        '',
+        '',
+    ))
+
+
+def fingerprint_secret_hit(rule_id: str, secret: str, match: str, url: str) -> dict:
+    """Return a stable identity for alert dedupe.
+
+    When gitleaks provides context around the secret, redact only the secret value
+    and fingerprint the source location plus that redacted context. Rotating
+    values like XSRF-TOKEN=<uuid> then update one finding. If the finding is only
+    a bare value, fall back to the raw value hash so unrelated credentials are not
+    collapsed blindly.
+    """
+    secret_sha256 = hashlib.sha256((secret or '').encode('utf-8', 'replace')).hexdigest()
+    redacted_match = match or ''
+    if secret:
+        redacted_match = redacted_match.replace(secret, '<secret>')
+    redacted_match = _compact(redacted_match)
+
+    if redacted_match and redacted_match != '<secret>':
+        basis = f"context\0{_canonical_url(url)}\0{redacted_match}"
+        strategy = 'context'
+    else:
+        basis = f"value\0{secret_sha256}"
+        strategy = 'value'
+
+    return {
+        'fingerprint': hashlib.sha256(f"{rule_id}\0{basis}".encode('utf-8', 'replace')).hexdigest(),
+        'fingerprint_strategy': strategy,
+        'match_redacted': redacted_match,
+        'secret_sha256': secret_sha256,
+    }
 
 
 def _request_meta(text: str):
@@ -149,13 +198,18 @@ def secrets_scan(savedirs, staging_dir: str, host_scheme: dict = None) -> list:
         secret = fnd.get('Secret', '')
         src = src_map.get(os.path.basename(fnd.get('File', '')), {})
         rule_id = fnd.get('RuleID', '')
+        match = fnd.get('Match', '')
+        identity = fingerprint_secret_hit(rule_id, secret, match, src.get('url', ''))
         hits.append({
             'rule_id': rule_id,
             'severity': severity_for(rule_id),
             'description': fnd.get('Description', ''),
             'secret': secret,
-            'secret_sha256': hashlib.sha256(secret.encode('utf-8', 'replace')).hexdigest(),
-            'match': fnd.get('Match', ''),
+            'secret_sha256': identity['secret_sha256'],
+            'fingerprint': identity['fingerprint'],
+            'fingerprint_strategy': identity['fingerprint_strategy'],
+            'match_redacted': identity['match_redacted'],
+            'match': match,
             'line': fnd.get('StartLine'),
             'file': src.get('path', fnd.get('File', '')),
             'url': src.get('url', ''),

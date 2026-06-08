@@ -12,13 +12,14 @@ import math
 import ipaddress
 import traceback
 from urllib.parse import urlsplit
+from pymongo.errors import DuplicateKeyError
 from juicy import juicer, http_probes_validators, domain_validators, http_paths_validators
 from modules.domain import dnsx, domain_purespray, extract_prefixes
 from modules.http import httprobes
 from modules.httpfuzz import httpfuzz
 from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
-from modules.secrets import secrets_scan
+from modules.secrets import fingerprint_secret_hit, secrets_scan
 from modules.txt_harvester import harvest_savedir
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
 from utils.common import uniq_list, file_lines_count, hit_tostr, prefix_cluster_filter, scope_equal_filter
@@ -120,6 +121,82 @@ def db_get_modified(items, db_collection, key_fields, fields, compare_func):
                 if not comp_res_history['equal']:
                     item['diffs'] = comp_res['diffs']
                     yield item
+
+
+def db_get_modified_secrets(items, db_collection):
+    fields = [
+        'scope', 'host', 'rule_id', 'severity', 'description', 'secret',
+        'secret_sha256', 'fingerprint', 'fingerprint_strategy',
+        'match_redacted', 'match', 'line', 'file', 'url',
+    ]
+
+    def update_query(item):
+        q = {'$set': {'last_alive': datetime.now()}, '$unset': {}}
+        for f in fields:
+            if f in item:
+                q['$set'][f] = item[f]
+            else:
+                q['$unset'][f] = ''
+        return q
+
+    def legacy_fingerprint_match(item):
+        q = {
+            'scope': item.get('scope'),
+            'host': item.get('host'),
+            'rule_id': item.get('rule_id'),
+            '$or': [
+                {'fingerprint': {'$exists': False}},
+                {'fingerprint': None},
+            ],
+        }
+        for old in db_collection.find(q):
+            identity = fingerprint_secret_hit(
+                old.get('rule_id', ''),
+                old.get('secret', ''),
+                old.get('match', ''),
+                old.get('url', ''),
+            )
+            if identity['fingerprint'] == item.get('fingerprint'):
+                return old
+
+    for item in items:
+        upd = update_query(item)
+        fingerprint_q = {
+            'scope': item.get('scope'),
+            'host': item.get('host'),
+            'rule_id': item.get('rule_id'),
+            'fingerprint': item.get('fingerprint'),
+        }
+        old_item = db_collection.find_one_and_update(fingerprint_q, upd)
+        if not old_item:
+            legacy_hash_q = {
+                'scope': item.get('scope'),
+                'host': item.get('host'),
+                'rule_id': item.get('rule_id'),
+                'secret_sha256': item.get('secret_sha256'),
+            }
+            old_item = db_collection.find_one_and_update(legacy_hash_q, upd)
+
+        if not old_item:
+            old_item = legacy_fingerprint_match(item)
+            if old_item:
+                item['_id'] = old_item['_id']
+                try:
+                    db_collection.update_one({'_id': item['_id']}, upd)
+                except DuplicateKeyError:
+                    db_collection.update_one(fingerprint_q, upd)
+                continue
+
+        if not old_item:
+            insert_item = {'add_date': datetime.now(), 'last_alive': datetime.now()}
+            for f in fields:
+                if f in item:
+                    insert_item[f] = item[f]
+            res = db_collection.insert_one(insert_item)
+            item['_id'] = res.inserted_id
+            yield item
+        else:
+            item['_id'] = old_item['_id']
 
 
 def stale_probes(db_collection, scan_field, interval_days, alive_in_days, exclude_ids=None):
@@ -337,9 +414,7 @@ def secrets_workflow(savedirs, all_probes):
     if not hits:
         return
 
-    up_fields = ['scope','host','rule_id','severity','description','secret','secret_sha256','match','line','file','url']
-    index_fields = ['scope','host','rule_id','secret_sha256']
-    new_hits = list(db_get_modified(hits, db['secret_hits'], index_fields, up_fields, compare.secret_hit))
+    new_hits = list(db_get_modified_secrets(hits, db['secret_hits']))
     logging.info(f"{len(new_hits)} new secret(s) found")
     if not new_hits:
         return

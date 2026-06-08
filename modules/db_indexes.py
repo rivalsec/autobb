@@ -33,6 +33,10 @@ INDEXES = {
     ],
     'secret_hits': [
         ([('scope', 1), ('host', 1), ('rule_id', 1), ('secret_sha256', 1)], {'unique': True}),
+        (
+            [('scope', 1), ('host', 1), ('rule_id', 1), ('fingerprint', 1)],
+            {'unique': True, 'partialFilterExpression': {'fingerprint': {'$type': 'string'}}},
+        ),
         ([('scope', 1)], {}),
     ],
     'alerts': [

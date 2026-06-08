@@ -31,7 +31,7 @@ def port(new, old, compare_history = False):
 
 
 def secret_hit(new, old, compare_history = False):
-    """Never re-alert: dedup is the (scope,host,rule_id,secret_sha256) index key."""
+    """Never re-alert: secret workflow dedupes by stable leak fingerprint."""
     return {'equal':True, 'diffs':{}}
 
 
