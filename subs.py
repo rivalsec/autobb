@@ -130,9 +130,12 @@ def db_get_modified_secrets(items, db_collection):
         'match_redacted', 'match', 'line', 'file', 'url',
     ]
 
-    def update_query(item):
+    def update_query(item, preserve_secret=False):
+        preserve_fields = {'secret', 'secret_sha256', 'match'} if preserve_secret else set()
         q = {'$set': {'last_alive': datetime.now()}, '$unset': {}}
         for f in fields:
+            if f in preserve_fields:
+                continue
             if f in item:
                 q['$set'][f] = item[f]
             else:
@@ -161,13 +164,21 @@ def db_get_modified_secrets(items, db_collection):
 
     for item in items:
         upd = update_query(item)
+        dedupe_upd = update_query(item, preserve_secret=item.get('fingerprint_strategy') == 'context')
         fingerprint_q = {
             'scope': item.get('scope'),
             'host': item.get('host'),
             'rule_id': item.get('rule_id'),
             'fingerprint': item.get('fingerprint'),
         }
-        old_item = db_collection.find_one_and_update(fingerprint_q, upd)
+        try:
+            old_item = db_collection.find_one_and_update(fingerprint_q, dedupe_upd)
+        except DuplicateKeyError:
+            old_item = db_collection.find_one(fingerprint_q)
+            if old_item:
+                db_collection.update_one({'_id': old_item['_id']}, dedupe_upd)
+            else:
+                raise
         if not old_item:
             legacy_hash_q = {
                 'scope': item.get('scope'),
@@ -182,9 +193,9 @@ def db_get_modified_secrets(items, db_collection):
             if old_item:
                 item['_id'] = old_item['_id']
                 try:
-                    db_collection.update_one({'_id': item['_id']}, upd)
+                    db_collection.update_one({'_id': item['_id']}, dedupe_upd)
                 except DuplicateKeyError:
-                    db_collection.update_one(fingerprint_q, upd)
+                    db_collection.update_one(fingerprint_q, dedupe_upd)
                 continue
 
         if not old_item:
