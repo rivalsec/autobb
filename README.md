@@ -258,7 +258,7 @@ nuclei:
 
 ### Secrets
 
-Passive secret scanning runs gitleaks over the HTTP response bodies already saved by httpx/ffuf (request headers are stripped first, so your own custom headers are never matched). gitleaks has no native severity, so AutoBB applies its own `severity` policy to sort and label alerts.
+Passive secret scanning runs gitleaks over the HTTP response bodies already saved by httpx/ffuf (request headers are stripped first, so your own custom headers are never matched). gitleaks has no native severity, so AutoBB applies its own `severity` policy to sort and label alerts. Alerts are deduped by a stable leak fingerprint: when gitleaks provides surrounding context, AutoBB redacts the secret value and fingerprints the source URL plus redacted match, which prevents rotating values like CSRF/session cookies from alerting every run. Bare secret-only matches still dedupe by the raw secret hash.
 
 ```yaml
 secrets:
