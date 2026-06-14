@@ -108,6 +108,13 @@ def path_4xx_to_200(http_path, scopes, filters, weight = 10):
             return " !4xx>200", weight
 
 
+def path_api_keyword(http_path, scopes, filters, weight = 5):
+    """path segment contains 'api' — likely an API endpoint, higher value target."""
+    path = http_path.get('path', '')
+    if re.search(r'(?<![a-z])api(?![a-z])', path, re.IGNORECASE):
+        return " !api", weight
+
+
 def juicer(items, validators, scopes, filters):
     """items juicer"""
     for item in items:
@@ -123,7 +130,7 @@ def juicer(items, validators, scopes, filters):
 # validators
 domain_validators = [domain_cname_notinscope,have_diffs]
 http_probes_validators = [probe_unusual_ports, probe_cert_notinscope, probe_cname_404, probe_unusual404title, probe_location_notinscope, have_diffs]
-http_paths_validators = [path_unusual_status, path_status_200, path_4xx_to_200, have_diffs]
+http_paths_validators = [path_unusual_status, path_status_200, path_4xx_to_200, path_api_keyword, have_diffs]
 
 
 if __name__=="__main__":
