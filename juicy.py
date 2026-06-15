@@ -89,7 +89,7 @@ def path_unusual_status(http_path, scopes, filters, weight = 2):
         return f" !s{http_path['status_code']}", weight
 
 
-def path_status_200(http_path, scopes, filters, weight = 5):
+def path_status_200(http_path, scopes, filters, weight = 10):
     """200 OK on a fuzzed path = a real resource was found."""
     if http_path.get('status_code') == 200:
         return " !s200", weight
