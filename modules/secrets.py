@@ -67,6 +67,14 @@ def fingerprint_secret_hit(rule_id: str, secret: str, match: str, url: str) -> d
         redacted_match = redacted_match.replace(secret, '<secret>')
     redacted_match = _compact(redacted_match)
 
+    # Some gitleaks rules (e.g. gitlab-session-cookie) emit Match == Secret, so
+    # the replace above collapses everything to '<secret>'. Recover a stable prefix
+    # (key= / key: pattern) so rotating values still dedup to the same finding.
+    if redacted_match == '<secret>' and match:
+        m = re.match(r'^([a-zA-Z_][a-zA-Z0-9_.\-]*)(\s*[=:]\s*)', match)
+        if m:
+            redacted_match = m.group(1) + m.group(2) + '<secret>'
+
     if redacted_match and redacted_match != '<secret>':
         basis = f"context\0{_canonical_url(url)}\0{redacted_match}"
         strategy = 'context'
