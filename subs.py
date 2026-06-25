@@ -22,6 +22,7 @@ from modules.vulns import nuclei_active, nuclei_passive
 from modules.secrets import fingerprint_secret_hit, secrets_scan
 from modules.txt_harvester import harvest_savedir
 from modules import asn
+from modules import scope_osint
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
 from utils.common import uniq_list, file_lines_count, hit_tostr, prefix_cluster_filter, scope_equal_filter
 from config import config, scopes, db, glob, alerter
@@ -58,6 +59,7 @@ def cli_args():
     parser.add_argument('--secrets', action='store_true', help='passive secret scan of saved httpx/ffuf responses (gitleaks)')
     parser.add_argument('--no-subfinder', action='store_true', help='skip the subfinder step in subdomain generation')
     parser.add_argument('--asn-suggest', action='store_true', help='suggest org-owned netblocks (CIDRs) from confirmed assets ASNs (suggest-only, no scan)')
+    parser.add_argument('--apex-suggest', action='store_true', help='suggest sibling apex domains from TLS SANs/CNAME/PTR already in db (suggest-only)')
     args = parser.parse_args()
     return args
 
@@ -510,6 +512,41 @@ def asn_suggest_workflow():
             alerter.notify(msg, source="asn_suggest")
 
 
+def apex_suggest_workflow():
+    '''Suggest sibling apex domains from TLS SANs + CNAME/PTR already in Mongo
+    (suggest-only). Corroboration-gated; new apexes deduped via the
+    scope_candidates unique index so each is suggested once.'''
+    cfg = config.get('scope_suggest') or {}
+    for scope in scopes:
+        cands = scope_osint.candidates(db, scope, cfg)
+        if not cands:
+            continue
+        lines = []
+        new_count = 0
+        for apex, sources in cands:
+            ev = [f"{t}:{e}" for t, e in sources]
+            types = sorted({t for t, _ in sources})
+            try:
+                db['scope_candidates'].insert_one({
+                    'scope': scope['name'], 'apex': apex,
+                    'sources': types, 'evidence': ev,
+                    'add_date': datetime.now(), 'last_seen': datetime.now(),
+                })
+                new_count += 1
+                lines.append(f"{apex} — {scope_osint.summarize_sources(sources)}")
+            except DuplicateKeyError:
+                db['scope_candidates'].update_one(
+                    {'scope': scope['name'], 'apex': apex},
+                    {'$addToSet': {'sources': {'$each': types}, 'evidence': {'$each': ev}},
+                     '$set': {'last_seen': datetime.now()}})
+
+        if new_count:
+            msg = notify_block(
+                f"+{new_count} apex suggestion(s) ({scope['name']}). Add confirmed to scope.domains:",
+                lines)
+            alerter.notify(msg, source="apex_suggest")
+
+
 def notify_ports(port_probes):
     notify_lines = []
     uniq_ips =  set([x['ip'] for x in port_probes])
@@ -758,6 +795,11 @@ def main():
 
     # harvest in-scope hosts/URLs from saved http response files (httpx + ffuf)
     harvest_savedir([glob.httprobes_savedir, glob.fuzz_savedir], glob.harvested_dir)
+
+    # suggest sibling apex domains from TLS SANs/CNAME/PTR already in db (suggest-only)
+    if args.apex_suggest:
+        logging.info("apex domain suggestion")
+        apex_suggest_workflow()
 
 
 def main_gc():
