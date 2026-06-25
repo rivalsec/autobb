@@ -9,9 +9,11 @@ TSV row format (tab-separated):
     range_start  range_end  AS_number  country_code  AS_description
 `AS_number == 0` rows mark unannounced ranges and are skipped.
 
-The dataset lives at a single writable path under AUTOBB_RUNTIME_DIR (the dir
-the pipeline already owns). update_db() downloads it there at pipeline start;
-load_db() reads it. Missing dataset -> enrichment degrades to a no-op.
+The dataset lives at a single path in the system temp dir. update_db() downloads
+it there at pipeline start; load_db() reads it. Temp is always writable (no repo
+clutter, non-root safe) and persists within a boot session so local runs reuse
+it; in Docker it's ephemeral per container, so each run fetches a fresh copy.
+Missing dataset -> enrichment degrades to a no-op.
 """
 import bisect
 import gzip
@@ -19,9 +21,10 @@ import ipaddress
 import logging
 import os
 import shutil
+import tempfile
 import urllib.request
 
-RUNTIME_TSV = os.path.join(os.environ.get('AUTOBB_RUNTIME_DIR', '.'), 'ip2asn.tsv')
+RUNTIME_TSV = os.path.join(tempfile.gettempdir(), 'autobb-ip2asn.tsv')
 
 # {version: {'starts': [int,...], 'rows': [(start, end, asn, country, name),...]}}
 # parallel lists kept sorted by start for bisect; cached for the process lifetime.
@@ -170,7 +173,7 @@ def prefixes_for_asn(asn):
 def update_db(cfg):
     """Ensure the ip2asn dataset is available at pipeline start.
 
-    Downloads it into the writable runtime dir when missing, or when `refresh`
+    Downloads it into the system temp dir when missing, or when `refresh`
     forces a fresh copy. Atomic + validated: a truncated/garbage download never
     replaces a working TSV, and any failure leaves the existing copy (if any) in
     place so the run continues (enrichment just no-ops when there's no dataset).
