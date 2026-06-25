@@ -45,6 +45,14 @@ juicer_filters:
   title404: []
   location: []
 
+# Offline IP->ASN enrichment (modules/asn.py). The dataset (a generic public
+# BGP dump — does NOT leak the target list) is downloaded into the runtime dir
+# at pipeline start when missing. refresh=true forces a fresh copy every start.
+asn:
+  refresh: false
+  url: https://iptoasn.com/data/ip2asn-combined.tsv.gz
+  timeout: 60
+
 db:
   conn_str: 'mongodb://bbmongodb:27017'
   database: 'autobbdb'

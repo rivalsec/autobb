@@ -12,8 +12,8 @@ def domain(new, old, compare_history = False):
     """
     cname only first, on others there are to many clouds chages
     """
-    compare_fields = ['cname.0']
-    field_res = field_comparer(new,old,compare_fields, [tld_isequal_comp], compare_history)
+    compare_fields = ['cname.0','asn.as_number']
+    field_res = field_comparer(new,old,compare_fields, [tld_isequal_comp, asn_null_isequal_comp], compare_history)
     return field_res
 
 
@@ -21,8 +21,8 @@ def http_probe(new, old, compare_history = False):
     """
     'status_code','title','cnames'??,'tls-grab.fingerprint_sha256'
     """
-    compare_fields = ['status_code','title','cnames.0','tls-grab.common_name.0']
-    field_res = field_comparer(new,old, compare_fields, [tld_isequal_comp, redirect_title_isequal_comp], compare_history)
+    compare_fields = ['status_code','title','cnames.0','tls-grab.common_name.0','asn.as_number']
+    field_res = field_comparer(new,old, compare_fields, [tld_isequal_comp, redirect_title_isequal_comp, asn_null_isequal_comp], compare_history)
     return field_res
 
 
@@ -58,6 +58,16 @@ def redirect_title_isequal_comp(field_name, new_val, old_val):
         return False
     base = lambda t: t[len(prefix):].split('?', 1)[0]
     return base(new_val) == base(old_val)
+
+
+def asn_null_isequal_comp(field_name, new_val, old_val):
+    """asn enrichment is best-effort: a missing dataset (failed/disabled
+    download) or an unresolved IP yields no asn. Treat any null<->AS transition
+    as equal so a failed download or first-time population never alerts; only a
+    real AS->AS change is a meaningful diff."""
+    if field_name != 'asn.as_number':
+        return False
+    return not new_val or not old_val
 
 
 def tld_isequal_comp(field_name, new_val, old_val, fields = ['tls-grab.common_name.0','cnames.0','cname.0']):

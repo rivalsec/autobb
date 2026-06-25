@@ -14,6 +14,7 @@ INDEXES = {
         ([('last_alive', 1)], {}),
         ([('last_nuclei_scan', 1)], {}),
         ([('last_httpfuzz_scan', 1)], {}),
+        ([('scope', 1), ('asn.as_number', 1)], {}),
     ],
     'http_paths': [
         ([('url', 1), ('path', 1)], {}),

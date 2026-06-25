@@ -21,6 +21,7 @@ from modules.port import portprobes
 from modules.vulns import nuclei_active, nuclei_passive
 from modules.secrets import fingerprint_secret_hit, secrets_scan
 from modules.txt_harvester import harvest_savedir
+from modules import asn
 from utils.common import domains_setscope, threshold_filter, scope_update, domain_inscope
 from utils.common import uniq_list, file_lines_count, hit_tostr, prefix_cluster_filter, scope_equal_filter
 from config import config, scopes, db, glob, alerter
@@ -61,7 +62,12 @@ def cli_args():
 
 
 def db_get_modified_domains (items, db_collection):
-    return db_get_modified( items, db_collection, ['host'], ['host','a','a_rev','cname','scope'], compare.domain )
+    fields = ['host','a','a_rev','cname','scope']
+    # only persist/compare asn when a dataset is loaded, so a failed/disabled
+    # download never $unsets asn already on disk
+    if asn.available():
+        fields.append('asn')
+    return db_get_modified( items, db_collection, ['host'], fields, compare.domain )
 
 
 def db_get_modified(items, db_collection, key_fields, fields, compare_func):
@@ -262,11 +268,15 @@ def sites_workflow(domains, httpx_threads=1):
     random.shuffle(domains)
 
     httprobe_res = httprobes(domains, threads=httpx_threads, savedir=glob.httprobes_savedir)
+    httprobe_res = asn.enrich_iter(httprobe_res)
 
     #new probes
     up_fields = ["url", "scheme","port","hash","a","cnames","input", "location","title","webserver",
                 "content_type","method","host","content_length","words","lines","chain_status_codes","status_code","tls",
                 "time","tech","final_url",'scope']
+    # only persist asn when a dataset is loaded (see db_get_modified_domains)
+    if asn.available():
+        up_fields.append('asn')
     sites_new = list(db_get_modified(httprobe_res, db['http_probes'], ['url'], up_fields, compare.http_probe))
     #todo filter equal by scope same code,title, content-lenght?, technologies?
     sites_new = sites_equal_filter(sites_new)
@@ -277,7 +287,7 @@ def sites_workflow(domains, httpx_threads=1):
         return
 
     juicer(sites_new, http_probes_validators, scopes, config['juicer_filters'])
-    notify_by_weight(sites_new, "probe(s)", lambda x: f"{x['url']} [{x['status_code']}] [{x.get('title','')}]{x['juicy_info']}", source="http_probe")
+    notify_by_weight(sites_new, "probe(s)", lambda x: f"{x['url']} [{x['status_code']}] [{x.get('title','')}]{asn.tag(x)}{x['juicy_info']}", source="http_probe")
 
     if args.http_fuzz:
         httpfuzz_workflow(sites_new)
@@ -507,6 +517,9 @@ def main():
         ]
     )
 
+    # refresh the offline ip2asn dataset at start (opt-in; no-op when disabled)
+    asn.update_db(config.get('asn'))
+
     old_scopes_subs = uniq_list('host')
     subs_now = uniq_list('host')
 
@@ -603,6 +616,7 @@ def main():
         subs_now.extend(recon_subs)
         
     #remove new from old we are intersecting on changed subs !!!
+    asn.enrich(subs_now)
     logging.info(f"db_get_modified on {len(subs_now)} domains")
     new_scopes_subs = list(db_get_modified_domains (subs_now, db['domains']))
     new_hosts = set([n['host'] for n in new_scopes_subs])
@@ -612,7 +626,7 @@ def main():
     # new and modified subdomains
     if len(new_scopes_subs) > 0:
         juicer(new_scopes_subs, domain_validators, scopes, config['juicer_filters'])
-        domains_print_func = lambda x: f"{x['host']} {x.get('a_rev', '')} [{x['juicy_info']}]"
+        domains_print_func = lambda x: f"{x['host']} {x.get('a_rev', '')}{asn.tag(x)} [{x['juicy_info']}]"
         notify_by_weight(new_scopes_subs, "domain(s)", domains_print_func, source="domain")
 
         new_port_probes = []
