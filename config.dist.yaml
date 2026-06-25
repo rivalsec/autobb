@@ -45,6 +45,31 @@ juicer_filters:
   title404: []
   location: []
 
+# Sibling apex-domain suggestion (--apex-suggest, modules/scope_osint.py).
+# Mines other registrable domains the org likely owns from TLS SANs + CNAME/PTR
+# already in MongoDB (suggest-only — paste confirmed apexes into scope.domains).
+scope_suggest:
+  min_sources: 2          # require this many distinct (type, evidence) signals
+  ignore_apexes:          # third-party/CDN/SaaS apexes that are never the org's
+    - google.com
+    - googleapis.com
+    - gstatic.com
+    - googleusercontent.com
+    - doubleclick.net
+    - cloudflare.com
+    - cloudflare.net
+    - akamai.net
+    - akamaiedge.net
+    - akamaitechnologies.com
+    - amazonaws.com
+    - cloudfront.net
+    - azureedge.net
+    - windows.net
+    - fastly.net
+    - fbcdn.net
+    - jsdelivr.net
+    - cloudflare-dns.com
+
 # Offline IP->ASN enrichment (modules/asn.py). The dataset (a generic public
 # BGP dump — does NOT leak the target list) is downloaded into the runtime dir
 # at pipeline start when missing. refresh=true forces a fresh copy every start.
