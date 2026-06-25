@@ -40,6 +40,10 @@ INDEXES = {
         ),
         ([('scope', 1)], {}),
     ],
+    'asn_suggestions': [
+        ([('scope', 1), ('as_number', 1), ('cidr', 1)], {'unique': True}),
+        ([('scope', 1)], {}),
+    ],
     'alerts': [
         ([('created_at', 1)], {}),
         ([('source', 1), ('created_at', 1)], {}),

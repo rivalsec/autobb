@@ -57,6 +57,7 @@ def cli_args():
     parser.add_argument('--http-fuzz', action='store_true', help='bruteforce dirs/files on new alive http probes (ffuf)')
     parser.add_argument('--secrets', action='store_true', help='passive secret scan of saved httpx/ffuf responses (gitleaks)')
     parser.add_argument('--no-subfinder', action='store_true', help='skip the subfinder step in subdomain generation')
+    parser.add_argument('--asn-suggest', action='store_true', help='suggest org-owned netblocks (CIDRs) from confirmed assets ASNs (suggest-only, no scan)')
     args = parser.parse_args()
     return args
 
@@ -446,6 +447,69 @@ def secrets_workflow(savedirs, all_probes):
     alerter.notify(notify_block(f"+{len(new_hits)} secret(s).", lines), source="secrets", items=new_hits)
 
 
+def asn_suggest_workflow():
+    '''Suggest org-owned netblocks from confirmed assets' ASNs (suggest-only,
+    no scanning). Seeds from in-scope http_probes + domains carrying asn, finds
+    likely org ASNs, expands them to CIDRs, and alerts ranges not already in
+    scope. New suggestions are deduped via the asn_suggestions unique index so a
+    given range is suggested once.'''
+    if not asn.available():
+        logging.info("asn-suggest: no dataset loaded, skipping")
+        return
+    acfg = config.get('asn') or {}
+    cloud = acfg.get('cloud_asns', [])
+    min_assets = acfg.get('suggest_min_assets', 3)
+    max_prefixes = acfg.get('suggest_max_prefixes', 50)
+    since = datetime.now() - timedelta(days=acfg.get('suggest_alive_days', 30))
+
+    # accurate ASN->prefix source for discovery: wait for the background build
+    # started at pipeline start (falls back to iptoasn prefixes if unavailable)
+    asn.wait_pyasn_db()
+
+    for scope in scopes:
+        q = {'scope': scope['name'], 'asn': {'$exists': True}, 'last_alive': {'$gte': since}}
+        docs = []
+        for d in db['http_probes'].find(q, {'asn': 1, 'url': 1}):
+            d['asset'] = d.get('url')
+            docs.append(d)
+        for d in db['domains'].find(q, {'asn': 1, 'host': 1}):
+            d['asset'] = d.get('host')
+            docs.append(d)
+
+        orgs = asn.org_asns(docs, cloud_asns=cloud, min_assets=min_assets, host_field='asset')
+        if not orgs:
+            continue
+
+        existing = set(scope.get('cidr', []))
+        lines = []
+        new_count = 0
+        for num, name, count in orgs:
+            cidrs = asn.prefixes_for_asn(num)
+            if len(cidrs) > max_prefixes:
+                logging.info(f"asn-suggest: AS{num} announces {len(cidrs)} prefixes (>{max_prefixes}), skipping")
+                continue
+            fresh = []
+            for c in (x for x in cidrs if x not in existing):
+                try:
+                    db['asn_suggestions'].insert_one({
+                        'scope': scope['name'], 'as_number': num, 'as_name': name,
+                        'cidr': c, 'asset_count': count, 'add_date': datetime.now(),
+                    })
+                    fresh.append(c)
+                except DuplicateKeyError:
+                    pass  # already suggested -> suppress re-alert
+            if fresh:
+                new_count += len(fresh)
+                lines.append(f"AS{num} {name} — {count} assets, {len(cidrs)} range(s), {len(fresh)} new:")
+                lines.extend(f"  {c}" for c in fresh)
+
+        if new_count:
+            msg = notify_block(
+                f"+{new_count} ASN netblock suggestion(s) ({scope['name']}). Add confirmed ranges to scope.cidr:",
+                lines)
+            alerter.notify(msg, source="asn_suggest")
+
+
 def notify_ports(port_probes):
     notify_lines = []
     uniq_ips =  set([x['ip'] for x in port_probes])
@@ -519,6 +583,9 @@ def main():
 
     # refresh the offline ip2asn dataset at start (opt-in; no-op when disabled)
     asn.update_db(config.get('asn'))
+    # build the pyasn prefix db in the background so it's ready by suggest-time
+    if args.asn_suggest:
+        asn.start_pyasn_db(config.get('asn'))
 
     old_scopes_subs = uniq_list('host')
     subs_now = uniq_list('host')
@@ -683,6 +750,11 @@ def main():
         q = {"scope": {"$in": [s["name"] for s in scopes]}}
         all_probes = list(db['http_probes'].find(q, {"url": 1, "scope": 1}))
         secrets_workflow([glob.httprobes_savedir, glob.fuzz_savedir], all_probes)
+
+    # suggest org-owned netblocks from confirmed assets' ASNs (suggest-only)
+    if args.asn_suggest:
+        logging.info("ASN netblock suggestion")
+        asn_suggest_workflow()
 
     # harvest in-scope hosts/URLs from saved http response files (httpx + ffuf)
     harvest_savedir([glob.httprobes_savedir, glob.fuzz_savedir], glob.harvested_dir)

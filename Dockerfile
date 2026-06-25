@@ -56,4 +56,4 @@ ENV AUTOBB_RUNTIME_DIR=/var/autobb
 WORKDIR /autobb
 
 ENTRYPOINT ["python", "subs.py"]
-CMD ["--workflow-olds", "--dns-brute", "--dns-alts", "--ports", "--nuclei", "--ports-olds", "--passive", "--http-fuzz", "--secrets"]
+CMD ["--workflow-olds", "--dns-brute", "--dns-alts", "--ports", "--nuclei", "--ports-olds", "--passive", "--http-fuzz", "--secrets", "--asn-suggest"]

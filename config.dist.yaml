@@ -52,6 +52,20 @@ asn:
   refresh: false
   url: https://iptoasn.com/data/ip2asn-combined.tsv.gz
   timeout: 60
+  # Netblock suggestion (--asn-suggest, suggest-only — never auto-scans).
+  # ASNs of CDN/cloud providers to ignore when guessing org-owned netblocks.
+  cloud_asns: [13335, 16509, 14618, 15169, 396982, 8075, 54113, 16625, 20940, 12222, 14061, 13238, 19551, 209242, 54994]
+  suggest_min_assets: 3      # min distinct assets on an ASN to call it org-owned
+  suggest_max_prefixes: 50   # skip ASNs announcing more ranges (shared hosting)
+  suggest_alive_days: 30     # only seed from assets seen alive in this window
+  # ASN->prefix source for suggestion. pyasn (real BGP RIB) is far more accurate
+  # than iptoasn for org core ASNs. Leave pyasn_db empty to auto-build a fresh
+  # db from RouteViews at suggest-time (~70MB download + convert); or point it at
+  # a prebuilt .dat you refresh out-of-band (pyasn_util_download/convert via cron).
+  # If pyasn or the db is unavailable, suggestion falls back to iptoasn prefixes.
+  pyasn_db: ''
+  pyasn_refresh: false       # rebuild the auto-built db each run even if present
+  pyasn_build_timeout: 600
 
 db:
   conn_str: 'mongodb://bbmongodb:27017'

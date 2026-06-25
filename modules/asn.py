@@ -21,10 +21,19 @@ import ipaddress
 import logging
 import os
 import shutil
+import subprocess
 import tempfile
+import threading
 import urllib.request
 
 RUNTIME_TSV = os.path.join(tempfile.gettempdir(), 'autobb-ip2asn.tsv')
+# pyasn .dat: ASN->prefix backend for discovery, built from a real BGP RIB (far
+# more accurate than iptoasn for an org's core ASN). Optional/hybrid: iptoasn
+# still does IP->ASN+name enrichment; prefixes_for_asn falls back to the TSV
+# when no pyasn db is available.
+PYASN_DAT = os.path.join(tempfile.gettempdir(), 'autobb-ipasn.dat')
+_PYASN = None
+_pyasn_thread = None
 
 # {version: {'starts': [int,...], 'rows': [(start, end, asn, country, name),...]}}
 # parallel lists kept sorted by start for bisect; cached for the process lifetime.
@@ -155,9 +164,99 @@ def enrich_iter(items, ip_field='a'):
         yield item
 
 
+def load_pyasn(path=None, force=False):
+    """Return a loaded pyasn object (BGP RIB-based ASN<->prefix db), or None when
+    pyasn isn't installed or the .dat is missing. Cached for the process."""
+    global _PYASN
+    if _PYASN is not None and not force:
+        return _PYASN or None
+    path = path or PYASN_DAT
+    if not os.path.isfile(path):
+        return None
+    try:
+        import pyasn
+        _PYASN = pyasn.pyasn(path)
+        logging.info(f"asn: pyasn prefix db loaded from {path}")
+    except Exception as e:
+        logging.warning(f"asn: pyasn db unavailable ({e})")
+        _PYASN = False   # sentinel: tried and failed, don't retry
+    return _PYASN or None
+
+
+def update_pyasn_db(cfg):
+    """Build the pyasn .dat from the latest RouteViews RIB, for the discovery
+    prefix source. Heavy (~70MB RIB download + convert), so only called when
+    suggestion runs. Uses a prebuilt db at cfg['pyasn_db'] when set; otherwise
+    auto-builds into temp when missing (or cfg['pyasn_refresh']). Atomic +
+    fail-safe: any failure leaves prefixes_for_asn to fall back to iptoasn."""
+    cfg = cfg or {}
+    global PYASN_DAT
+    prebuilt = cfg.get('pyasn_db')
+    if prebuilt:
+        PYASN_DAT = prebuilt
+        return                       # operator-managed db, never auto-build
+    if os.path.isfile(PYASN_DAT) and not cfg.get('pyasn_refresh'):
+        return
+    dl = shutil.which('pyasn_util_download.py')
+    conv = shutil.which('pyasn_util_convert.py')
+    if not (dl and conv):
+        logging.warning("asn: pyasn utils not found, discovery falls back to iptoasn prefixes")
+        return
+    timeout = cfg.get('pyasn_build_timeout', 600)
+    with tempfile.TemporaryDirectory() as td:
+        rib = os.path.join(td, 'rib.bz2')
+        tmp = PYASN_DAT + '.tmp'
+        try:
+            subprocess.run([dl, '--latestv46', '--filename', rib],
+                           check=True, capture_output=True, timeout=timeout)
+            subprocess.run([conv, '--single', rib, tmp],
+                           check=True, capture_output=True, timeout=timeout)
+            os.replace(tmp, PYASN_DAT)
+            load_pyasn(force=True)
+            logging.info("asn: pyasn prefix db built from latest RIB")
+        except Exception as e:
+            logging.warning(f"asn: pyasn db build failed, using iptoasn prefixes ({e})")
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def start_pyasn_db(cfg):
+    """Kick off the pyasn db build in a background thread so the heavy RIB
+    download + convert overlaps the recon pipeline instead of blocking at
+    suggest-time. Idempotent. Call wait_pyasn_db() before prefixes_for_asn()."""
+    global _pyasn_thread
+    if _pyasn_thread is not None:
+        return
+    _pyasn_thread = threading.Thread(target=update_pyasn_db, args=(cfg,),
+                                     name='pyasn-build', daemon=True)
+    _pyasn_thread.start()
+    logging.info("asn: pyasn db build started in background")
+
+
+def wait_pyasn_db(timeout=None):
+    """Block until the background pyasn build (if any) finishes. If it's still
+    running after `timeout`, prefixes_for_asn just falls back to iptoasn until
+    the db lands (the atomic write means a half-built db is never read)."""
+    if _pyasn_thread is not None:
+        _pyasn_thread.join(timeout)
+        if _pyasn_thread.is_alive():
+            logging.warning("asn: pyasn db build still running, using iptoasn prefixes for now")
+
+
 def prefixes_for_asn(asn):
-    """ASN -> list of announced CIDR strings. (Replaces asnmap.)"""
+    """ASN -> list of announced CIDR strings. Prefers the pyasn RIB db (accurate
+    for org core ASNs); falls back to the iptoasn TSV when pyasn is unavailable.
+    (Replaces asnmap.)"""
     asn = int(asn)
+    pa = load_pyasn()
+    if pa is not None:
+        return sorted(pa.get_as_prefixes(asn) or [])
+    return _prefixes_from_tsv(asn)
+
+
+def _prefixes_from_tsv(asn):
     cidrs = []
     db = load_db()
     for ver in (4, 6):
@@ -168,6 +267,32 @@ def prefixes_for_asn(asn):
             net_end = ipaddress.ip_address(end)
             cidrs += [str(c) for c in ipaddress.summarize_address_range(net_start, net_end)]
     return cidrs
+
+
+def org_asns(docs, cloud_asns=(), min_assets=3, host_field='host'):
+    """Find likely org-owned ASNs from confirmed assets.
+
+    Counts distinct assets (by host_field) per asn.as_number across docs, drops
+    ASNs in the cloud/CDN denylist, and keeps those with >= min_assets. Returns
+    [(as_number, as_name, asset_count), ...] sorted by count desc.
+    """
+    cloud = {int(a) for a in cloud_asns}
+    seen = {}   # as_number -> {'name', 'hosts': set()}
+    for d in docs:
+        a = d.get('asn') or {}
+        num = a.get('as_number')
+        if not num or int(num) in cloud:
+            continue
+        num = int(num)
+        host = d.get(host_field)
+        if not host:
+            continue
+        entry = seen.setdefault(num, {'name': a.get('as_name') or '', 'hosts': set()})
+        entry['hosts'].add(host)
+    out = [(num, e['name'], len(e['hosts']))
+           for num, e in seen.items() if len(e['hosts']) >= min_assets]
+    out.sort(key=lambda x: x[2], reverse=True)
+    return out
 
 
 def update_db(cfg):

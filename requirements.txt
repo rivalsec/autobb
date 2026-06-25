@@ -5,3 +5,4 @@ tldextract
 python-nmap
 boto3
 pytest
+pyasn
