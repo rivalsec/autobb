@@ -112,6 +112,9 @@ class _MultiAlerter:
         for name in names:
             mod = importlib.import_module(f"modules.alerts.{name}")
             mod.config = config['alerts'][name]
+            #alerts-wide proxy, backend can override it in its own section
+            if config['alerts'].get('proxy') and isinstance(mod.config, dict):
+                mod.config.setdefault('proxy', config['alerts']['proxy'])
             self.backends.append((name, mod))
 
     def notify(self, msg, *, source=None, items=None, **kwargs):

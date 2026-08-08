@@ -1,4 +1,4 @@
-requests
+requests[socks]
 pyyaml
 pymongo
 tldextract
