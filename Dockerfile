@@ -29,6 +29,15 @@ RUN set -eux; \
     rm -f *.zip; \
     chmod +x naabu subfinder httpx nuclei shuffledns dnsx puredns ffuf gitleaks
 
+# Python wheels (runs in parallel too) — pyasn ships a C extension with no
+# prebuilt wheel, so it needs a compiler that the release image doesn't carry
+FROM python:3.12-slim-bookworm AS pywheels
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+ADD ./requirements.txt /requirements.txt
+RUN pip wheel --no-cache-dir --wheel-dir /wheels -r /requirements.txt
+
 #Release
 FROM python:3.12-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -47,7 +56,9 @@ COPY --from=bins          /dl/gitleaks          /usr/bin/gitleaks
 COPY --from=massdns-build /massdns/bin/massdns  /usr/bin/massdns
 
 ADD ./requirements.txt /requirements.txt
-RUN pip install --no-cache-dir --no-cache -r requirements.txt
+COPY --from=pywheels /wheels /wheels
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
+    && rm -rf /wheels
 
 # keep ephemeral run artifacts (httprobes/, tmp/) off the bind-mounted /autobb
 # so files don't end up host-owned by container-root; harvested/ stays on /autobb
