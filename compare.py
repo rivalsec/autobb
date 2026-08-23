@@ -1,6 +1,31 @@
 #!/usr/bin/env python3
 from pkgutil import iter_modules
+import re
 import tldextract
+
+# CDN/WAF *front* detection for ASN-change noise suppression. Deliberately
+# excludes general cloud *hosting* (AWS/GCP/Azure): those serve real origins, so
+# a move onto them is a possible leaked origin we want to alert. CDN_FRONT_ASNS
+# is populated from config['asn']['cdn_front_asns'] at startup (subs.py); the
+# name pattern catches unlisted fronting providers by as_name (CDNVIDEO/CDNETWORKS).
+CDN_FRONT_ASNS = set()
+CDN_FRONT_NAME_RE = re.compile(
+    r'(CDN|CLOUDFLARE|AKAMAI|FASTLY|CLOUDFRONT|INCAPSULA|IMPERVA|STACKPATH|'
+    r'EDGECAST|EDGIO|LIMELIGHT|LLNW|HIGHWINDS|QUANTIL|GCORE|G-CORE|BUNNY|'
+    r'KEYCDN|SUCURI|CACHEFLY|MEDIANOVA|EDGENEXUS)', re.I)
+
+
+def _is_cdn_front(asn):
+    """True when an asn dict looks like a CDN/WAF fronting provider (not general
+    cloud hosting). Used to silence CDN<->CDN rotation while still surfacing a
+    move to a real origin (including cloud-hosted ones)."""
+    if not asn:
+        return False
+    num = asn.get('as_number')
+    if num is not None and int(num) in CDN_FRONT_ASNS:
+        return True
+    return bool(CDN_FRONT_NAME_RE.search(asn.get('as_name') or ''))
+
 
 def nuclei_hit(new, old, compare_history = False):
     """ NO COMPARE AT ALL
@@ -8,22 +33,42 @@ def nuclei_hit(new, old, compare_history = False):
     #    compare_fields = ["extracted-results","meta"] ???
     return {'equal':True, 'diffs':{}}
 
+def _same_ips(new, old):
+    """True only when both docs carry the same (non-empty) A-record set. Used to
+    tell a real infra move from ASN dataset/BGP churn on an unchanged IP."""
+    n, o = new.get('a'), old.get('a')
+    return bool(n) and bool(o) and set(n) == set(o)
+
+
+def _suppress_asn_noise(new, old, res):
+    """Drop an asn.prefix diff (updating the value silently in the db) when it's
+    not a meaningful infra change:
+      - same IP -> dataset/BGP re-attribution on an unchanged IP, or
+      - new network is a CDN/WAF front -> CDN<->CDN rotation / origin->CDN noise.
+    The kept signal is a move TO a real origin, INCLUDING cloud-hosted ones
+    (AWS/GCP/Azure are not treated as fronts). Other diffs still alert."""
+    if 'asn.prefix' in res['diffs'] and (_same_ips(new, old) or _is_cdn_front(new.get('asn'))):
+        del res['diffs']['asn.prefix']
+        res['equal'] = not res['diffs']
+    return res
+
+
 def domain(new, old, compare_history = False):
     """
     cname only first, on others there are to many clouds chages
     """
-    compare_fields = ['cname.0','asn.as_number']
+    compare_fields = ['cname.0','asn.prefix']
     field_res = field_comparer(new,old,compare_fields, [tld_isequal_comp, asn_null_isequal_comp], compare_history)
-    return field_res
+    return _suppress_asn_noise(new, old, field_res)
 
 
 def http_probe(new, old, compare_history = False):
     """
     'status_code','title','cnames'??,'tls-grab.fingerprint_sha256'
     """
-    compare_fields = ['status_code','title','cnames.0','tls-grab.common_name.0','asn.as_number']
+    compare_fields = ['status_code','title','cnames.0','tls-grab.common_name.0','asn.prefix']
     field_res = field_comparer(new,old, compare_fields, [tld_isequal_comp, redirect_title_isequal_comp, asn_null_isequal_comp], compare_history)
-    return field_res
+    return _suppress_asn_noise(new, old, field_res)
 
 
 def port(new, old, compare_history = False):
@@ -62,10 +107,10 @@ def redirect_title_isequal_comp(field_name, new_val, old_val):
 
 def asn_null_isequal_comp(field_name, new_val, old_val):
     """asn enrichment is best-effort: a missing dataset (failed/disabled
-    download) or an unresolved IP yields no asn. Treat any null<->AS transition
-    as equal so a failed download or first-time population never alerts; only a
-    real AS->AS change is a meaningful diff."""
-    if field_name != 'asn.as_number':
+    download) or an unresolved IP yields no asn. Treat any null<->prefix
+    transition as equal so a failed download or first-time population never
+    alerts; only a real prefix->prefix change is a meaningful diff."""
+    if field_name != 'asn.prefix':
         return False
     return not new_val or not old_val
 

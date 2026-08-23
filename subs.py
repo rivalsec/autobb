@@ -58,6 +58,7 @@ def cli_args():
     parser.add_argument('--http-fuzz', action='store_true', help='bruteforce dirs/files on new alive http probes (ffuf)')
     parser.add_argument('--secrets', action='store_true', help='passive secret scan of saved httpx/ffuf responses (gitleaks)')
     parser.add_argument('--no-subfinder', action='store_true', help='skip the subfinder step in subdomain generation')
+    parser.add_argument('--no-sites', action='store_true', help='domains flow only: skip http probing/processing of new subdomains')
     parser.add_argument('--asn-suggest', action='store_true', help='suggest org-owned netblocks (CIDRs) from confirmed assets ASNs (suggest-only, no scan)')
     parser.add_argument('--apex-suggest', action='store_true', help='suggest sibling apex domains from TLS SANs/CNAME/PTR already in db (suggest-only)')
     args = parser.parse_args()
@@ -620,6 +621,11 @@ def main():
 
     # refresh the offline ip2asn dataset at start (opt-in; no-op when disabled)
     asn.update_db(config.get('asn'))
+    # CDN/WAF front asns for change-noise suppression (compare.py); pattern optional
+    _acfg = config.get('asn') or {}
+    compare.CDN_FRONT_ASNS = set(int(a) for a in _acfg.get('cdn_front_asns', []))
+    if _acfg.get('cdn_front_pattern'):
+        compare.CDN_FRONT_NAME_RE = re.compile(_acfg['cdn_front_pattern'], re.I)
     # build the pyasn prefix db in the background so it's ready by suggest-time
     if args.asn_suggest:
         asn.start_pyasn_db(config.get('asn'))
@@ -747,7 +753,8 @@ def main():
             new_ports_workflow(new_port_probes)
             new_scopes_subs.extend(port_probes) #all(old,new) ports on new/changed subdomain 
 
-        sites_workflow(new_scopes_subs, config['httpx']['threads_onnew'])
+        if not args.no_sites:
+            sites_workflow(new_scopes_subs, config['httpx']['threads_onnew'])
 
     #ports on old subdomains
     new_port_probes = []

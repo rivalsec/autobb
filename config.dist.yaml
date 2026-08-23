@@ -12,6 +12,9 @@ alerts:
   # single: use: telegram
   # multiple: use: [telegram, smtp]
   use: telegram
+  # optional proxy for alerts only (telegram), socks5h needs PySocks installed
+  # proxy: socks5h://127.0.0.1:1080
+  # proxy: http://user:pass@127.0.0.1:3128
   # https://core.telegram.org/bots/tutorial
   # Get Chat ID https://gist.github.com/nafiesl/4ad622f344cd1dc3bb1ecbe468ff9f8a#get-chat-id-for-a-private-chat
   telegram: 
@@ -77,9 +80,16 @@ asn:
   refresh: false
   url: https://iptoasn.com/data/ip2asn-combined.tsv.gz
   timeout: 60
-  # Netblock suggestion (--asn-suggest, suggest-only — never auto-scans).
-  # ASNs of CDN/cloud providers to ignore when guessing org-owned netblocks.
+  # CDN/cloud ASNs to ignore when guessing org-owned netblocks (--asn-suggest,
+  # never auto-scans). Includes cloud hosting (AWS/GCP/Azure) since assets there
+  # aren't "your netblock".
   cloud_asns: [13335, 16509, 14618, 15169, 396982, 8075, 54113, 16625, 20940, 12222, 14061, 13238, 19551, 209242, 54994]
+  # CDN/WAF *fronting* providers, for silencing ASN/prefix change-alert noise
+  # (CDN<->CDN rotation, origin->CDN). Deliberately EXCLUDES cloud hosting so a
+  # leaked origin on AWS/GCP/Azure still alerts. Unlisted fronts are also caught
+  # by as_name (override the default with cdn_front_pattern). Numbers optional.
+  cdn_front_asns: []
+  # cdn_front_pattern: '(CDN|CLOUDFLARE|AKAMAI|FASTLY|INCAPSULA|...)'
   suggest_min_assets: 3      # min distinct assets on an ASN to call it org-owned
   suggest_max_prefixes: 50   # skip ASNs announcing more ranges (shared hosting)
   suggest_alive_days: 30     # only seed from assets seen alive in this window

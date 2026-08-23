@@ -46,7 +46,7 @@ def load_db(path=None, force=False):
     if _DB is not None and not force:
         return _DB
     path = path or RUNTIME_TSV
-    db = {4: {'starts': [], 'rows': []}, 6: {'starts': [], 'rows': []}, 'names': {}}
+    db = {4: {'starts': [], 'rows': []}, 6: {'starts': [], 'rows': []}}
     rows = {4: [], 6: []}
     if not os.path.isfile(path):
         # No dataset (e.g. download failed/disabled): degrade to a no-op so
@@ -54,7 +54,6 @@ def load_db(path=None, force=False):
         logging.warning(f"asn: dataset not found at {path}, ASN enrichment disabled")
         _DB = db
         return _DB
-    names = {}
     with open(path, 'r', errors='replace') as f:
         for line in f:
             parts = line.rstrip('\n').split('\t')
@@ -73,19 +72,27 @@ def load_db(path=None, force=False):
             except ValueError:
                 continue
             rows[start.version].append((int(start), int(end), asn, country, name))
-            names.setdefault(asn, name)   # number -> name, for resolving diffs
     for ver in (4, 6):
         rows[ver].sort()
         db[ver]['rows'] = rows[ver]
         db[ver]['starts'] = [r[0] for r in rows[ver]]
-    db['names'] = names
     _DB = db
     logging.info(f"asn: loaded {len(rows[4])} v4 + {len(rows[6])} v6 ranges from {path}")
     return _DB
 
 
+def _range_to_prefix(start, end):
+    """iptoasn range [start_int, end_int] -> a stable CIDR string identifying the
+    announced network block (comma-joined when the range spans several CIDRs)."""
+    nets = ipaddress.summarize_address_range(
+        ipaddress.ip_address(start), ipaddress.ip_address(end))
+    return ','.join(str(n) for n in nets)
+
+
 def lookup(ip):
-    """IP string -> {as_number, as_name, country} or None. (Replaces httpx -asn.)"""
+    """IP string -> {as_number, as_name, country, prefix} or None.
+    `prefix` is the announced network range the IP falls in (the stable unit for
+    change detection). (Replaces httpx -asn.)"""
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
@@ -98,7 +105,8 @@ def lookup(ip):
     start, end, asn, country, name = rows[i]
     if int(addr) > end:
         return None
-    return {'as_number': asn, 'as_name': name, 'country': country}
+    return {'as_number': asn, 'as_name': name, 'country': country,
+            'prefix': _range_to_prefix(start, end)}
 
 
 def available():
@@ -107,16 +115,6 @@ def available():
     field already on disk (a failed download must not delete prior ASN data)."""
     db = load_db()
     return bool(db[4]['rows'] or db[6]['rows'])
-
-
-def name_for_asn(asn):
-    """AS number -> name from the loaded dataset, or None. Used to make the
-    number-only change diff readable in alerts."""
-    try:
-        asn = int(asn)
-    except (TypeError, ValueError):
-        return None
-    return load_db().get('names', {}).get(asn)
 
 
 def _as_str(num, name):
@@ -128,16 +126,17 @@ def _as_str(num, name):
 
 def tag(item):
     """Alert-line ASN context, with a leading space so it drops into existing
-    format strings. Shows the current asn as ' [AS<num> <name>]', or the
-    transition ' [AS<old> <oldname> -> AS<num> <name>]' when asn changed this
-    run (the comparator diffs by number; we resolve names here for readability).
-    '' when the item has no asn."""
+    format strings. Shows the current asn as ' [AS<num> <name> <prefix>]', or the
+    transition ' [<old_prefix> -> AS<num> <name> <prefix>]' when the network range
+    changed this run (the comparator diffs by prefix). '' when no asn."""
     a = item.get('asn') or {}
     cur = _as_str(a.get('as_number'), a.get('as_name'))
-    old_num = (item.get('diffs') or {}).get('asn.as_number')
-    if old_num and old_num != 'null':
-        old = _as_str(old_num, name_for_asn(old_num))
-        return f" [{old} -> {cur or '?'}]"
+    prefix = a.get('prefix')
+    if cur and prefix:
+        cur = f"{cur} {prefix}"
+    old_prefix = (item.get('diffs') or {}).get('asn.prefix')
+    if old_prefix and old_prefix != 'null':
+        return f" [{old_prefix} -> {cur or '?'}]"
     return f" [{cur}]" if cur else ''
 
 

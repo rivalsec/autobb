@@ -73,9 +73,13 @@ def mine(db, scope, cfg=None):
     for d in db['domains'].find({'scope': name, 'cname': {'$exists': True}}, {'host': 1, 'cname': 1}):
         for cn in d.get('cname') or []:
             consider(cn, ('cname', (d.get('host') or '').lower()))
-    for p in db['http_probes'].find({'scope': name, 'cnames': {'$exists': True}}, {'host': 1, 'cnames': 1}):
+    # evidence keyed by the probe hostname (input), not http_probes.host: httpx's
+    # `host` is the connected IP, which would label the source as an IP and merge
+    # distinct hostnames sharing one IP into a single source.
+    for p in db['http_probes'].find({'scope': name, 'cnames': {'$exists': True}}, {'input': 1, 'cnames': 1}):
+        src_host = (p.get('input') or '').split(':')[0].lower()  # input may be host:port
         for cn in p.get('cnames') or []:
-            consider(cn, ('cname', (p.get('host') or '').lower()))
+            consider(cn, ('cname', src_host))
 
     # PTR (reverse DNS)
     for d in db['domains'].find({'scope': name, 'a_rev': {'$exists': True}}, {'host': 1, 'a_rev': 1}):
