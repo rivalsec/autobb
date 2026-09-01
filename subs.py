@@ -624,6 +624,8 @@ def main():
     # CDN/WAF front asns for change-noise suppression (compare.py); pattern optional
     _acfg = config.get('asn') or {}
     compare.CDN_FRONT_ASNS = set(int(a) for a in _acfg.get('cdn_front_asns', []))
+    # front CNAMEs: tell an edge from an origin inside mixed-use cloud asns
+    compare.CDN_FRONT_CNAMES = set(str(c) for c in _acfg.get('cdn_front_cnames', []))
     if _acfg.get('cdn_front_pattern'):
         compare.CDN_FRONT_NAME_RE = re.compile(_acfg['cdn_front_pattern'], re.I)
     # build the pyasn prefix db in the background so it's ready by suggest-time

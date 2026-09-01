@@ -13,6 +13,11 @@ CDN_FRONT_NAME_RE = re.compile(
     r'(CDN|CLOUDFLARE|AKAMAI|FASTLY|CLOUDFRONT|INCAPSULA|IMPERVA|STACKPATH|'
     r'EDGECAST|EDGIO|LIMELIGHT|LLNW|HIGHWINDS|QUANTIL|GCORE|G-CORE|BUNNY|'
     r'KEYCDN|SUCURI|CACHEFLY|MEDIANOVA|EDGENEXUS)', re.I)
+# Fronting providers whose edges live INSIDE a mixed-use cloud ASN (cloudfront in
+# AMAZON-02, ghs in GOOGLE, ...). Those ASNs must not be listed in CDN_FRONT_ASNS
+# or a bare EC2/GCE origin would stop alerting too, so the CNAME is what tells an
+# edge from an origin. Populated from config['asn']['cdn_front_cnames'] (subs.py).
+CDN_FRONT_CNAMES = set()
 
 
 def _is_cdn_front(asn):
@@ -25,6 +30,33 @@ def _is_cdn_front(asn):
     if num is not None and int(num) in CDN_FRONT_ASNS:
         return True
     return bool(CDN_FRONT_NAME_RE.search(asn.get('as_name') or ''))
+
+
+def _cname_is_front(host):
+    """True when a hostname sits under (or passes through) a CDN_FRONT_CNAMES
+    entry. Both host and entry are dot-wrapped before matching, so an entry hits
+    as a suffix ('cloudfront.net' vs d1.cloudfront.net), as an interior label run
+    ('elb' vs x.elb.us-east-1.amazonaws.com — AWS emits both ELB orderings), and
+    never as a partial label ('cloudfront.net' must NOT match evilcloudfront.net).
+    """
+    if not host:
+        return False
+    h = '.' + str(host).strip('.').lower() + '.'
+    return any('.' + e.strip('.').lower() + '.' in h for e in CDN_FRONT_CNAMES)
+
+
+def _has_front_cname(doc):
+    """True when any hop of a doc's CNAME chain is a known front. The whole chain
+    is walked, not just [0]: ~21% of CDN-fronted assets here reach the edge via an
+    in-scope alias first (host -> plus.example.com -> d1.cloudfront.net).
+    'cname' is the domains field, 'cnames' the http_probes one."""
+    if not doc:
+        return False
+    for key in ('cname', 'cnames'):
+        for hop in (doc.get(key) or []):
+            if _cname_is_front(hop):
+                return True
+    return False
 
 
 def nuclei_hit(new, old, compare_history = False):
@@ -44,10 +76,16 @@ def _suppress_asn_noise(new, old, res):
     """Drop an asn.prefix diff (updating the value silently in the db) when it's
     not a meaningful infra change:
       - same IP -> dataset/BGP re-attribution on an unchanged IP, or
-      - new network is a CDN/WAF front -> CDN<->CDN rotation / origin->CDN noise.
+      - new network is a CDN/WAF front -> CDN<->CDN rotation / origin->CDN noise, or
+      - the CNAME chain still lands on a front -> edge IPs rotating inside a
+        mixed-use cloud ASN (cloudfront in AMAZON-02), which the ASN test alone
+        cannot see without also silencing bare origins in that same ASN.
     The kept signal is a move TO a real origin, INCLUDING cloud-hosted ones
-    (AWS/GCP/Azure are not treated as fronts). Other diffs still alert."""
-    if 'asn.prefix' in res['diffs'] and (_same_ips(new, old) or _is_cdn_front(new.get('asn'))):
+    (a bare EC2/GCE host has no front CNAME, so it still alerts). Other diffs
+    still alert regardless."""
+    if 'asn.prefix' in res['diffs'] and (_same_ips(new, old)
+                                         or _is_cdn_front(new.get('asn'))
+                                         or _has_front_cname(new)):
         del res['diffs']['asn.prefix']
         res['equal'] = not res['diffs']
     return res

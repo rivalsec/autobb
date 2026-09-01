@@ -90,6 +90,29 @@ asn:
   # by as_name (override the default with cdn_front_pattern). Numbers optional.
   cdn_front_asns: []
   # cdn_front_pattern: '(CDN|CLOUDFLARE|AKAMAI|FASTLY|INCAPSULA|...)'
+  # Fronts that live INSIDE a mixed-use cloud ASN, where the ASN alone can't tell
+  # an edge from an origin: cloudfront edges and bare EC2 both announce as
+  # AMAZON-02, so listing 16509 above would silence leaked origins too. Matched
+  # against every hop of the CNAME chain (not just the first — a host often
+  # reaches the edge via an in-scope alias). An entry matches a whole
+  # dot-delimited label run, as a suffix or in the middle, so 'elb' catches both
+  # *.<region>.elb.amazonaws.com and *.elb.<region>.amazonaws.com, while
+  # 'cloudfront.net' never matches evilcloudfront.net. These are provider-wide,
+  # so the defaults work as-is; add the fronts your targets actually use.
+  # Do NOT add site-builder/SaaS hosts that are takeover signals (e.g. tilda.ws).
+  cdn_front_cnames:
+    - cloudfront.net
+    - elb                    # aws elb, both label orderings
+    - execute-api            # aws api gateway
+    - ghs.google.com         # google workspace custom domains
+    - googlehosted.com
+    - akamaiedge.net
+    - edgekey.net
+    - edgesuite.net
+    - azureedge.net
+    - trafficmanager.net
+    - msappproxy.net         # azure ad application proxy
+    - fastly.net
   suggest_min_assets: 3      # min distinct assets on an ASN to call it org-owned
   suggest_max_prefixes: 50   # skip ASNs announcing more ranges (shared hosting)
   suggest_alive_days: 30     # only seed from assets seen alive in this window
