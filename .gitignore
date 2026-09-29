@@ -15,6 +15,5 @@ test.py
 wordlists/
 .pytest_cache/
 /resolvers
-tests/
 subfinder_config.yaml
 harvested/

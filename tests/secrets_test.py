@@ -7,10 +7,60 @@ Run with: pytest secrets_test.py
 import os
 import shutil
 
-from modules.secrets import stage_bodies, secrets_scan
+from modules.secrets import fingerprint_secret_hit, stage_bodies, secrets_scan
 
 REQ_SECRET = "AKIAIOSFODNN7EXAMPLE"      # AWS-key-shaped, placed in OUR request header
 BODY_TEXT = '<html>data-site-key="7400bd5df8b843b28254659f1abcdef0"</html>'
+
+
+def test_secret_fingerprint_redacts_rotating_values():
+    first = fingerprint_secret_hit(
+        "generic-api-key",
+        "f5d63558-3960-4450-b012-c47b2aed47e4",
+        "XSRF-TOKEN=f5d63558-3960-4450-b012-c47b2aed47e4;",
+        "https://example.com/login?cache=1",
+    )
+    second = fingerprint_secret_hit(
+        "generic-api-key",
+        "cd4571a4-ff6c-4a4e-af74-6c17d651b9fc",
+        "XSRF-TOKEN=cd4571a4-ff6c-4a4e-af74-6c17d651b9fc;",
+        "https://example.com/login?cache=2",
+    )
+
+    assert first["fingerprint"] == second["fingerprint"]
+    assert first["secret_sha256"] != second["secret_sha256"]
+    assert first["fingerprint_strategy"] == "context"
+    assert first["match_redacted"] == "XSRF-TOKEN=<secret>;"
+
+
+def test_secret_fingerprint_dedup_gitlab_session_cookie():
+    """gitlab-session-cookie emits Match == Secret == '_gitlab_session=<hex>'.
+    Rotating session values must still collapse to the same fingerprint."""
+    first = fingerprint_secret_hit(
+        "gitlab-session-cookie",
+        "_gitlab_session=abc123def456abc123def456abc12345",
+        "_gitlab_session=abc123def456abc123def456abc12345",
+        "https://example.com/users/sign_in",
+    )
+    second = fingerprint_secret_hit(
+        "gitlab-session-cookie",
+        "_gitlab_session=zzz999yyy888zzz999yyy888zzz99900",
+        "_gitlab_session=zzz999yyy888zzz999yyy888zzz99900",
+        "https://example.com/users/sign_in",
+    )
+
+    assert first["fingerprint"] == second["fingerprint"]
+    assert first["secret_sha256"] != second["secret_sha256"]
+    assert first["fingerprint_strategy"] == "context"
+    assert first["match_redacted"] == "_gitlab_session=<secret>"
+
+
+def test_secret_fingerprint_keeps_bare_values_distinct():
+    first = fingerprint_secret_hit("github-pat", "ghp_first", "ghp_first", "https://example.com/")
+    second = fingerprint_secret_hit("github-pat", "ghp_second", "ghp_second", "https://example.com/")
+
+    assert first["fingerprint"] != second["fingerprint"]
+    assert first["fingerprint_strategy"] == "value"
 
 
 def _write_fixture(tmpdir):
