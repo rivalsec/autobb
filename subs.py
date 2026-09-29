@@ -726,7 +726,32 @@ def main():
                 recon_subs.remove(d)
         #TODO: db inplace ?
         subs_now.extend(recon_subs)
-        
+
+    # Pinned domains (added via autobbmcp's add_domains/add_resource write tools —
+    # see autobbmcp/mcp_server/writes.py) are hand-picked high-signal assets from
+    # an engagement. Resolve them directly through dnsx, same as scope apexes
+    # above (line ~682) and post-generation subs (line ~717): dnsx only resolves
+    # + does PTR lookups, it does NOT wildcard-filter. This deliberately bypasses
+    # domain_purespray()/puredns() (which can discard a pinned host if it shares
+    # an IP with many other subdomains) and threshold_filter() (which can drop it
+    # as a "weird"/over-represented parent_host), so a pinned domain is never
+    # silently dropped, and db_get_modified_domains below refreshes its
+    # last_alive every run same as any other tracked domain.
+    pinned_docs = list(db['domains'].find(
+        {'scope': {'$in': [s['name'] for s in scopes]}, 'pinned': True},
+        {'host': 1, 'scope': 1},
+    ))
+    already_resolved = {d['host'] for d in subs_now}
+    pinned_hosts = [d['host'] for d in pinned_docs if d['host'] not in already_resolved]
+    if pinned_hosts:
+        logging.info(f"Resolving {len(pinned_hosts)} pinned domain(s) (bypassing puredns)...")
+        pinned_resolved = dnsx(pinned_hosts)
+        domains_setscope(pinned_resolved, scopes)
+        unresolved = len(pinned_hosts) - len(pinned_resolved)
+        if unresolved:
+            logging.info(f"{unresolved} pinned domain(s) did not resolve this run")
+        subs_now.extend(d for d in pinned_resolved if d['scope'] != 'unknown')
+
     #remove new from old we are intersecting on changed subs !!!
     asn.enrich(subs_now)
     logging.info(f"db_get_modified on {len(subs_now)} domains")
