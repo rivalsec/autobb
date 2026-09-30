@@ -19,6 +19,8 @@ def alert(nuclei_hits, chunk_index, chunks_len):
 def fullscan(hosts):
     nuclei_hits = list(nuclei_active(config['fullscan']['nuclei_cmd'], hosts))
     #new nuclei hits
+    # NOTE: keep 'triage' (see modules/triage.py) out of up_fields — same
+    # guardrail as subs.py's nuclei_workflow().
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
     index_fields = ["template-id","matcher-name","matched-at"]
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)

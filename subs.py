@@ -134,6 +134,10 @@ def db_get_modified(items, db_collection, key_fields, fields, compare_func):
 
 
 def db_get_modified_secrets(items, db_collection):
+    # NOTE: keep 'triage' (see modules/triage.py) out of this list. A finding's
+    # triage status is set out-of-band (by autobbmcp's set_secret_status write
+    # tool, eventually a UI too) and must survive every scanner refresh
+    # untouched — adding it here would let a normal secrets scan $unset it.
     fields = [
         'scope', 'host', 'rule_id', 'severity', 'description', 'secret',
         'secret_sha256', 'fingerprint', 'fingerprint_strategy',
@@ -307,6 +311,10 @@ def nuclei_workflow(probes):
     sliced = random.sample(probes, min(len(probes), config['nuclei_one_time_max']))
 
     nuclei_hits = nuclei_active(config['nuclei']['cmd'], sliced)
+    # NOTE: keep 'triage' (see modules/triage.py) out of up_fields — set
+    # out-of-band by autobbmcp's set_nuclei_status write tool and must survive
+    # every nuclei re-run untouched. compare.nuclei_hit also does no comparison
+    # at all, so triage can never trigger diff/notify churn here either.
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
     index_fields = ["template-id","matcher-name","matched-at"]
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
@@ -355,6 +363,9 @@ def httpfuzz_workflow(sites_new):
     fuzz_hits, _ = scope_equal_filter(fuzz_hits, config['httpfuzz']['scope_equal_max'])
     fuzz_hits, _ = threshold_filter(fuzz_hits, 'url', config['httpfuzz']['paths_weird_threshold'])
     
+    # NOTE: keep 'triage' (see modules/triage.py) out of up_fields — set
+    # out-of-band by autobbmcp's set_path_status write tool and must survive
+    # every ffuf re-run untouched.
     up_fields = ['url','host','path','status_code','content_length','words','lines','redirect','scope']
     index_fields = ['url','path']
     paths_new = list(db_get_modified(fuzz_hits, db['http_paths'], index_fields, up_fields, compare.http_path))
@@ -399,6 +410,9 @@ def passive_workflow(all_http_probes):
         passive_results = nuclei_passive(glob.httprobes_savedir, all_http_probes, scan_type)
         
         #new nuclei hits
+        # NOTE: keep 'triage' (see modules/triage.py) out of up_fields — set
+        # out-of-band by autobbmcp's set_nuclei_status(passive=True) write tool
+        # and must survive every passive re-run untouched.
         up_fields = ["template-id","info","type","matcher-name","host","port","path","matched-at","meta","extracted-results","scope"]
         index_fields = ["template-id","matcher-name","host"]
         nuclei_hits_new = db_get_modified(passive_results, db['nuclei_passive_hits'], index_fields, up_fields, compare.nuclei_hit)
@@ -575,6 +589,8 @@ def new_ports_workflow(port_items):
     for h in port_items:
         h['url'] = f"{h['host']}:{h['port']}"
     nuclei_hits = nuclei_active(config['nuclei']['network_cmd'], port_items)
+    # NOTE: keep 'triage' (see modules/triage.py) out of up_fields — same
+    # guardrail as nuclei_workflow() above.
     up_fields = ["template-id","info","type","matcher-name","host","matched-at","meta","extracted-results","interaction","scope","curl-command"]
     index_fields = ["template-id","matcher-name","matched-at"]
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
