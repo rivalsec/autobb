@@ -530,7 +530,14 @@ def asn_suggest_workflow():
 def apex_suggest_workflow():
     '''Suggest sibling apex domains from TLS SANs + CNAME/PTR already in Mongo
     (suggest-only). Corroboration-gated; new apexes deduped via the
-    scope_candidates unique index so each is suggested once.'''
+    scope_candidates unique index so each is suggested once.
+
+    Approving a candidate no longer means editing scope.domains by hand: set
+    approval.status = "approved" on the doc (the autobbui Recon switch, or
+    bb-sandbox's Telegram Approve button) and config.py folds it into the
+    scope's live domains on the next run — see modules/scope_approval.py.
+    Candidates already approved are no longer suggested at all, since
+    scope_osint excludes everything in scope['domains'].'''
     cfg = config.get('scope_suggest') or {}
     for scope in scopes:
         cands = scope_osint.candidates(db, scope, cfg)
@@ -557,7 +564,8 @@ def apex_suggest_workflow():
 
         if new_count:
             msg = notify_block(
-                f"+{new_count} apex suggestion(s) ({scope['name']}). Add confirmed to scope.domains:",
+                f"+{new_count} apex suggestion(s) ({scope['name']}). "
+                f"Approve in autobbui (Recon -> Apex Candidates) to put one in scope:",
                 lines)
             alerter.notify(msg, source="apex_suggest")
 

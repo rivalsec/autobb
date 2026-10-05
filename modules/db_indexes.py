@@ -62,6 +62,9 @@ INDEXES = {
     'scope_candidates': [
         ([('scope', 1), ('apex', 1)], {'unique': True}),
         ([('scope', 1)], {}),
+        # config.py reads the approved apexes at import on every AutoBB invocation, and
+        # autobbmcp polls the same filter for the egress allowlist — keep it index-only.
+        ([('approval.status', 1), ('scope', 1)], {}),
     ],
     'alerts': [
         ([('created_at', 1)], {}),

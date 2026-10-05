@@ -5,10 +5,13 @@ from datetime import datetime
 from pymongo import MongoClient
 from utils.common import tsnow, file_to_list
 from modules.db_indexes import ensure_indexes
+from modules.scope_approval import apply_approved_apexes
 import importlib
 
 
 def load_scopes():
+    """Scopes exactly as configured in YAML. Human-approved apexes from Mongo are merged on
+    top once `db` exists — see apply_approved_apexes() at the bottom of this module."""
     scopes = []
     for scope in config['scope']:
         if not 'domains' in scope:
@@ -99,6 +102,14 @@ def http_header_args():
 mongodb_client = MongoClient(config['db']['conn_str'])
 db = mongodb_client[config['db']['database']]
 ensure_indexes(db)
+
+# Apexes the operator approved in Mongo (bb-sandbox's Telegram Approve button, or the autobbui
+# Recon switch) are folded into scope['domains'] here, so from this line on every module that
+# does `from config import scopes` treats them exactly like a YAML-configured apex — recon'd,
+# resolved, probed and scanned, not merely allowed. Needs `db`, which is why it sits here rather
+# than in load_scopes(); `scopes` is only read by consumers importing this module, all of which
+# happens after this point. See modules/scope_approval.py.
+apply_approved_apexes(scopes, db)
 
 #set alerter(s) from config and set alerter config (token etc)
 #alerts.use can be a single name ("telegram") or a list (["telegram", "email"])
