@@ -633,6 +633,10 @@ def chunk_size_calc(recon_domains_count: int):
 
 
 def main():
+    # force=True: config.py's module-level apply_approved_apexes() can already have
+    # triggered logging's implicit lazy basicConfig (level=WARNING, bare format) during
+    # import, which makes a later plain basicConfig() a no-op and silently swallows
+    # every INFO/DEBUG call in the modules below.
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
@@ -640,7 +644,8 @@ def main():
         handlers=[
             logging.StreamHandler(),
             logging.FileHandler(glob.tmp_dir + '/subs.log', 'w')
-        ]
+        ],
+        force=True
     )
 
     # refresh the offline ip2asn dataset at start (opt-in; no-op when disabled)

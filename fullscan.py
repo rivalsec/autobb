@@ -28,6 +28,10 @@ def fullscan(hosts):
 
 
 if __name__ == "__main__":
+    # force=True: the `config` import above runs apply_approved_apexes() at module
+    # level, which can already have triggered logging's implicit lazy basicConfig
+    # (level=WARNING, bare format) — a later plain basicConfig() would then be a
+    # no-op and silently swallow every INFO/DEBUG call below.
     from config import config, scopes, db, glob, alerter
     logging.basicConfig(
         level=logging.INFO,
@@ -36,7 +40,8 @@ if __name__ == "__main__":
         handlers=[
             logging.StreamHandler(),
             logging.FileHandler(glob.tmp_dir + '/fullscan.log', 'w')
-        ]
+        ],
+        force=True
     )
 
     ndaysago = datetime.datetime.now() - datetime.timedelta(days=config['fullscan']['host_alive_in_days'])
