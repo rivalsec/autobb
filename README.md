@@ -142,8 +142,14 @@ docker run --rm -v $(pwd):/autobb --net autobbnet autobb [FLAGS]
 | `--http-fuzz` | Bruteforce dirs/files (ffuf) on new alive HTTP probes |
 | `--secrets` | Passive secret scan (gitleaks) of saved httpx/ffuf responses |
 | `--no-subfinder` | Skip the subfinder (passive OSINT) step in subdomain enumeration |
+| `--no-sites` | Domains flow only: skip HTTP probing/processing of new subdomains |
 
-All flags are optional. The default Docker CMD enables every flag except `--no-subfinder`.
+All flags are optional. The default Docker CMD enables every flag except `--no-subfinder` and `--no-sites`.
+
+**Domains only** (enumerate + alert on new/changed subdomains, no website processing):
+```bash
+sudo docker run --rm -v $(pwd):/autobb --init --net autobbnet autobb --dns-brute --dns-alts --no-sites
+```
 
 **Light scan** (only new/modified assets):
 ```bash
@@ -208,6 +214,31 @@ Scopes can also be split into a separate file:
 ```yaml
 scope: !include ./scopes.yaml
 ```
+
+#### Approved apexes (second source of scope domains)
+
+A scope's domains are the union of the YAML above **and** every `scope_candidates`
+document for that scope with `approval.status == "approved"`:
+
+```js
+{ scope: "hackerone", apex: "sibling.io",
+  sources: [...], evidence: [...],
+  approval: { status: "approved", at: <date>, by: "telegram" } }   // absent = undecided
+```
+
+`config.py` merges those into `scope['domains']` at startup (`modules/scope_approval.py`), so an
+approved apex is **recon'd, resolved, probed, fuzzed and scanned exactly like a configured one** —
+subdomain enumeration, `domain_inscope()`, brute-force prefixes, scope attribution and juicy
+scoring all treat the two identically. It also stops being re-suggested, since `scope_osint`
+excludes anything already in `scope['domains']`.
+
+This is how a suggestion from `--scope-suggest` becomes live scope without a YAML edit: approve it
+in autobbui (Recon → Apex Candidates) or tap Approve on the Telegram alert bb-sandbox raises when
+its agent suggests one. Flipping it to `declined` takes it back out. Approvals for a scope name
+that isn't in this config are logged as a warning and ignored — AutoBB has no such scope.
+
+Nothing in this repo ever *sets* `approval`; AutoBB and the bb-sandbox agent only write
+candidates. Only the operator decides.
 
 ### Alerts
 
