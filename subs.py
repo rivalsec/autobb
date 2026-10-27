@@ -16,9 +16,9 @@ from pymongo.errors import DuplicateKeyError
 from juicy import juicer, http_probes_validators, domain_validators, http_paths_validators
 from modules.domain import dnsx, domain_purespray, extract_prefixes
 from modules.http import httprobes
-from modules.httpfuzz import httpfuzz
+from modules.httpfuzz import httpfuzz, prune_fuzz_savedir
 from modules.port import portprobes
-from modules.vulns import nuclei_active, nuclei_passive
+from modules.vulns import nuclei_active, nuclei_passive, stage_fuzz_for_passive
 from modules.secrets import fingerprint_secret_hit, secrets_scan
 from modules.txt_harvester import harvest_savedir
 from modules import asn
@@ -362,11 +362,20 @@ def httpfuzz_workflow(sites_new):
     )
     fuzz_hits, _ = scope_equal_filter(fuzz_hits, config['httpfuzz']['scope_equal_max'])
     fuzz_hits, _ = threshold_filter(fuzz_hits, 'url', config['httpfuzz']['paths_weird_threshold'])
-    
+    # all filters done -> prune the saved ffuf responses down to the surviving
+    # set, so passive nuclei / gitleaks / harvester never walk the wildcard /
+    # soft-404 duplicates the filters dropped (nothing reads the savedir before
+    # this point, so a single prune after all filters is enough)
+    prune_fuzz_savedir(glob.fuzz_savedir, fuzz_hits)
+    # _resultfile has done its job (pruning); drop it so the internal path never
+    # rides along into db['http_paths'] docs or the alerts collection
+    for h in fuzz_hits:
+        h.pop('_resultfile', None)
+
     # NOTE: keep 'triage' (see modules/triage.py) out of up_fields — set
     # out-of-band by autobbmcp's set_path_status write tool and must survive
     # every ffuf re-run untouched.
-    up_fields = ['url','host','path','status_code','content_length','words','lines','redirect','scope']
+    up_fields = ['url','host','path','status_code','content_length','words','lines','redirect','title','scope']
     index_fields = ['url','path']
     paths_new = list(db_get_modified(fuzz_hits, db['http_paths'], index_fields, up_fields, compare.http_path))
     logging.info(f"{len(paths_new)} new/changed paths found")
@@ -376,7 +385,7 @@ def httpfuzz_workflow(sites_new):
     juicer(paths_new, http_paths_validators, scopes, config['juicer_filters'])
     notify_by_weight(
         paths_new, "path(s)",
-        lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}] {x['content_length']}b {x['words']}w {x['lines']}l{(' -> ' + x['redirect']) if x.get('redirect') else ''}{x['juicy_info']}",
+        lambda x: f"{x.get('full_url') or x['url'] + x['path']} [{x['status_code']}]{(' ' + repr(x['title'])) if x.get('title') else ''} {x['content_length']}b {x['words']}w {x['lines']}l{(' -> ' + x['redirect']) if x.get('redirect') else ''}{x['juicy_info']}",
         source="http_path",
     )
 
@@ -408,7 +417,29 @@ def rescan_workflow():
 def passive_workflow(all_http_probes):
     for scan_type in ['passive']:
         passive_results = nuclei_passive(glob.httprobes_savedir, all_http_probes, scan_type)
-        
+
+        # also passively scan the (deduplicated) ffuf path responses: restage
+        # them into httpx -srd format so nuclei_passive parses + host-maps them
+        # like any httpx response. host->scheme mirrors secrets_workflow.
+        host_scheme = {}
+        for p in all_http_probes:
+            parts = urlsplit(p.get('url', ''))
+            h = (parts.hostname or '').lower()
+            if h and (h not in host_scheme or parts.scheme == 'https'):
+                host_scheme[h] = parts.scheme or 'https'
+        fuzz_stage = stage_fuzz_for_passive(
+            glob.fuzz_savedir, glob.tmp_dir + '/fuzz_passive', host_scheme)
+        if fuzz_stage:
+            fuzz_passive = nuclei_passive(fuzz_stage, all_http_probes, scan_type)
+            # a fuzz hit is on a specific path, not the host root; the staged
+            # file's trailing line is the full fuzzed url (scheme+host+path), so
+            # surface it as 'url' for the alert (host alone loses the path)
+            for p in fuzz_passive:
+                tail = (p.get('path') or '').rstrip().rsplit('\n', 1)[-1].strip()
+                if tail.startswith(('http://', 'https://')):
+                    p['url'] = tail
+            passive_results = list(passive_results) + fuzz_passive
+
         #new nuclei hits
         # NOTE: keep 'triage' (see modules/triage.py) out of up_fields — set
         # out-of-band by autobbmcp's set_nuclei_status(passive=True) write tool
@@ -419,7 +450,7 @@ def passive_workflow(all_http_probes):
         nuclei_hits_new = list(nuclei_hits_new)
         nuclei_notify(
             nuclei_hits_new,
-            lambda x: f'{x["scope"]}: {x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}',
+            lambda x: f'{x["scope"]}: {x.get("url") or x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}',
             f"Passive scan at {glob.httprobes_savedir}:\n",
             source="nuclei_passive",
         )

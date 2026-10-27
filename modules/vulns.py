@@ -1,12 +1,14 @@
 import logging
 from subprocess import Popen, PIPE, run, STDOUT, TimeoutExpired
-from config import config, glob, alerter, http_header_args
+from config import config, alerter, http_header_args
 import json
 import re
 import os
+import hashlib
 from threading import Timer
 from typing import Dict, List
 from utils.common import hit_tostr
+from modules.secrets import _request_meta
 from _thread import start_new_thread
 
 
@@ -82,10 +84,17 @@ def parse_passive_host(file: str):
 
 
 def nuclei_passive(probes_dir, all_probes, type = 'passive'):
-    #delete (passive scanner can't parse it)
-    index_file = glob.httprobes_savedir + '/index.txt'
-    if os.path.exists(index_file):
-        os.remove(index_file)
+    # httpx/ffuf drop an index.txt the passive scanner can't parse (one
+    # "malformed raw http response" error per template pass). Remove any under
+    # the dir we're actually about to scan -- httpx writes it to
+    # <savedir>/response/index.txt, not the root, so the old fixed root path
+    # missed it and flooded the log.
+    for root, _dirs, names in os.walk(probes_dir):
+        if 'index.txt' in names:
+            try:
+                os.remove(os.path.join(root, 'index.txt'))
+            except OSError:
+                pass
 
     if type == 'file':
         nuclei_cmd = config['nuclei']['file_cmd'].copy()
@@ -108,6 +117,61 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
         p_scope = next( (x['scope'] for x in all_probes if '//' + p['host'] in x['url']) , 'unknown' )
         p['scope'] = p_scope
     return nuclei_hits
+
+
+# ffuf -od stores a match as "<raw request>\n---- ^ Request .. Response v ----\n<raw response>";
+# nuclei's passive reader (and parse_passive_host) expect httpx -srd's
+# "<request>\n\n<response>\n\n<url>" under a <host>/ dir. These split the two apart.
+_FFUF_SEP_RE = re.compile(r'(?m)^-+.*Request.*Response.*-+\s*$')
+_HTTP_STATUS_RE = re.compile(r'(?m)^HTTP/\d')
+
+
+def stage_fuzz_for_passive(savedir: str, stage_dir: str, host_scheme: dict = None):
+    """Restage ffuf response files into httpx -srd format under a <host>/ tree
+    so nuclei_passive parses them and maps host->scope (via parse_passive_host)
+    exactly like httpx responses.
+
+    host_scheme - optional {host: 'http'|'https'} to rebuild the url line (the
+    raw request carries no scheme); defaults to https. Returns stage_dir when at
+    least one file was staged, else None."""
+    if not savedir or not os.path.isdir(savedir):
+        return None
+    host_scheme = host_scheme or {}
+    staged = 0
+    for root, _dirs, names in os.walk(savedir):
+        for name in names:
+            if name == 'index.txt':
+                continue
+            src = os.path.join(root, name)
+            try:
+                with open(src, 'rb') as f:
+                    text = f.read().decode('utf-8', errors='replace')
+            except OSError:
+                continue
+            sm = _HTTP_STATUS_RE.search(text)
+            if not sm:
+                continue                       # no parseable HTTP response
+            response = text[sm.start():]
+            sep = _FFUF_SEP_RE.search(text, 0, sm.start())
+            request = text[:sep.start()] if sep else text[:sm.start()]
+            host, authority, path = _request_meta(text)
+            if not host:
+                continue
+            scheme = host_scheme.get(host, 'https')
+            url = f"{scheme}://{authority}{path}" if authority else ''
+            host_dir = os.path.join(stage_dir, host)
+            os.makedirs(host_dir, exist_ok=True)
+            dst = os.path.join(host_dir, hashlib.sha1(src.encode('utf-8', 'replace')).hexdigest() + '.txt')
+            # frame byte-identically to httpx -srd: CRLF line endings and a CRLF
+            # blank line between request/response/url. The request's own trailing
+            # CRLFs must survive (an LF-only '\n\n' here leaves nuclei unable to
+            # terminate the request headers, so it never isolates the response body).
+            out = request.rstrip() + "\r\n\r\n" + response.rstrip() + "\r\n\r\n" + url + "\r\n"
+            with open(dst, 'w', newline='') as f:
+                f.write(out)
+            staged += 1
+    logging.info(f"[passive] staged {staged} ffuf response(s) from {savedir} -> {stage_dir}")
+    return stage_dir if staged else None
 
 
 def nuclei_check_templates_count(nuclei_res_stderr, nuclei_cmd=None):
