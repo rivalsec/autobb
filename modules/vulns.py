@@ -83,6 +83,24 @@ def parse_passive_host(file: str):
     return file.split('/')[-2]
 
 
+def _parse_hit_line(line, where):
+    """Parse one JSONL stdout line into a hit dict, or None to skip it. Tolerates
+    the junk nuclei/panuclei sometimes emit (blank lines, non-JSON noise, and
+    bare chunk markers like "0" that parse as valid JSON but aren't hit objects)
+    so one bad line can't abort the whole passive pass."""
+    if not line.strip():
+        return None
+    try:
+        obj = json.loads(line)
+    except json.JSONDecodeError:
+        logging.warning(f"{where}: skipping non-JSON stdout line: {line[:200]!r}")
+        return None
+    if not isinstance(obj, dict):
+        logging.warning(f"{where}: skipping non-object stdout line: {line[:200]!r}")
+        return None
+    return obj
+
+
 def nuclei_passive(probes_dir, all_probes, type = 'passive'):
     # httpx/ffuf drop an index.txt the passive scanner can't parse (one
     # "malformed raw http response" error per template pass). Remove any under
@@ -110,13 +128,68 @@ def nuclei_passive(probes_dir, all_probes, type = 'passive'):
     nuclei_check_templates_count(nuclei_res.stderr, nuclei_cmd)
     logging.info(nuclei_res.stderr)
     logging.info(nuclei_res.stdout)
-    nuclei_hits = [json.loads(x) for x in nuclei_res.stdout.splitlines()]
+    # nuclei occasionally emits junk on stdout (e.g. raw response
+    # chunked-transfer/HTML bleeding into the stream); a single bad line must not
+    # take down the whole pass, so skip it like nuclei_active does. Note a bare
+    # chunk marker like "0" is valid JSON but not a hit object, so also drop any
+    # parsed value that isn't a dict -- otherwise it crashes the loop below.
+    nuclei_hits = [h for h in (_parse_hit_line(x, 'nuclei_passive')
+                               for x in nuclei_res.stdout.splitlines()) if h is not None]
 
     for p in nuclei_hits:
         p['host'] = parse_passive_host(p['matched-at']) #only host[:port]
         p_scope = next( (x['scope'] for x in all_probes if '//' + p['host'] in x['url']) , 'unknown' )
         p['scope'] = p_scope
     return nuclei_hits
+
+
+def _trailing_url(file, _cache={}):
+    """Last line of a saved httpx/ffuf response file is the probe URL. panuclei
+    reports the file path as matched-at, so recover the URL for nicer alerts
+    (cache keyed by path; per-run timestamped dirs keep paths unique)."""
+    if file in _cache:
+        return _cache[file]
+    url = None
+    try:
+        with open(file, 'rb') as f:
+            lines = f.read().decode('utf-8', 'ignore').rstrip().splitlines()
+        if lines and lines[-1].strip().startswith(('http://', 'https://')):
+            url = lines[-1].strip()
+    except OSError:
+        pass
+    _cache[file] = url
+    return url
+
+
+def panuclei_passive(probes_dir, all_probes):
+    """Passive scan via panuclei (github.com/rivalsec/panuclei). It reads httpx
+    -srd files directly and evaluates word/regex/status/DSL matchers. Returns
+    hits in the same shape as nuclei_passive so the caller's dedup/notify path
+    is unchanged. exclude_templates (path prefixes) are forwarded as -et."""
+    pan_cmd = config['nuclei']['panuclei_cmd'].copy()
+    pan_cmd.extend(['-u', probes_dir])
+    for t in config['nuclei'].get('exclude_templates', []):
+        pan_cmd.extend(['-et', t])
+    logging.info(" ".join(pan_cmd))
+    res = run(pan_cmd, text=True, stderr=PIPE, stdout=PIPE)
+    logging.info(res.stderr)
+    hits = [h for h in (_parse_hit_line(x, 'panuclei_passive')
+                        for x in res.stdout.splitlines()) if h is not None]
+    for p in hits:
+        p['host'] = parse_passive_host(p['matched-at'])
+        p['scope'] = next((x['scope'] for x in all_probes if '//' + p['host'] in x['url']), 'unknown')
+        url = _trailing_url(p['matched-at'])
+        if url:
+            p['url'] = url
+    return hits
+
+
+def run_passive(probes_dir, all_probes):
+    """Dispatch the passive scan to the configured engine (nuclei | panuclei)."""
+    engine = (config['nuclei'].get('passive_engine') or 'nuclei').lower()
+    if engine == 'panuclei':
+        return panuclei_passive(probes_dir, all_probes)
+    return nuclei_passive(probes_dir, all_probes)
 
 
 # ffuf -od stores a match as "<raw request>\n---- ^ Request .. Response v ----\n<raw response>";

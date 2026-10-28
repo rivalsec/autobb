@@ -18,7 +18,7 @@ from modules.domain import dnsx, domain_purespray, extract_prefixes
 from modules.http import httprobes
 from modules.httpfuzz import httpfuzz, prune_fuzz_savedir
 from modules.port import portprobes
-from modules.vulns import nuclei_active, nuclei_passive, stage_fuzz_for_passive
+from modules.vulns import nuclei_active, run_passive, stage_fuzz_for_passive
 from modules.secrets import fingerprint_secret_hit, secrets_scan
 from modules.txt_harvester import harvest_savedir
 from modules import asn
@@ -416,7 +416,7 @@ def rescan_workflow():
 
 def passive_workflow(all_http_probes):
     for scan_type in ['passive']:
-        passive_results = nuclei_passive(glob.httprobes_savedir, all_http_probes, scan_type)
+        passive_results = run_passive(glob.httprobes_savedir, all_http_probes)
 
         # also passively scan the (deduplicated) ffuf path responses: restage
         # them into httpx -srd format so nuclei_passive parses + host-maps them
@@ -430,7 +430,7 @@ def passive_workflow(all_http_probes):
         fuzz_stage = stage_fuzz_for_passive(
             glob.fuzz_savedir, glob.tmp_dir + '/fuzz_passive', host_scheme)
         if fuzz_stage:
-            fuzz_passive = nuclei_passive(fuzz_stage, all_http_probes, scan_type)
+            fuzz_passive = run_passive(fuzz_stage, all_http_probes)
             # a fuzz hit is on a specific path, not the host root; the staged
             # file's trailing line is the full fuzzed url (scheme+host+path), so
             # surface it as 'url' for the alert (host alone loses the path)

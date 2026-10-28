@@ -171,7 +171,12 @@ nuclei:
     '-bs', '1',
     '-t', './nuclei-templates',
     #'-t', './nuclei-my-templates',
-  ]  
+  ]
+  # passive engine: 'nuclei' (-passive, passive_cmd above) or 'panuclei'
+  # (github.com/rivalsec/panuclei): faster, evaluates DSL, fewer false positives.
+  # exclude_templates -> -et. Default here is panuclei.
+  passive_engine: panuclei
+  panuclei_cmd: ['panuclei', '-t', './nuclei-templates/http', '-json']
 
 naabu:
   cmd: [

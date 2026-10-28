@@ -26,8 +26,9 @@ RUN set -eux; \
     curl -sSL  "https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_${OS}_${ARCH}.tar.gz"                        | tar xz ffuf; \
     GLARCH="$([ "$ARCH" = "amd64" ] && echo x64 || echo "$ARCH")"; \
     curl -sSL  "https://github.com/gitleaks/gitleaks/releases/download/v8.23.2/gitleaks_8.23.2_linux_${GLARCH}.tar.gz"        | tar xz gitleaks; \
+    curl -sSL  "https://github.com/rivalsec/panuclei/releases/download/v0.1.0/panuclei_0.1.0_${OS}_${ARCH}.tar.gz"           | tar xz panuclei; \
     rm -f *.zip; \
-    chmod +x naabu subfinder httpx nuclei shuffledns dnsx puredns ffuf gitleaks
+    chmod +x naabu subfinder httpx nuclei shuffledns dnsx puredns ffuf gitleaks panuclei
 
 # Python wheels (runs in parallel too) — pyasn ships a C extension with no
 # prebuilt wheel, so it needs a compiler that the release image doesn't carry
@@ -53,6 +54,7 @@ COPY --from=bins          /dl/dnsx              /usr/bin/dnsx
 COPY --from=bins          /dl/puredns           /usr/bin/puredns
 COPY --from=bins          /dl/ffuf              /usr/bin/ffuf
 COPY --from=bins          /dl/gitleaks          /usr/bin/gitleaks
+COPY --from=bins          /dl/panuclei          /usr/bin/panuclei
 COPY --from=massdns-build /massdns/bin/massdns  /usr/bin/massdns
 
 ADD ./requirements.txt /requirements.txt
