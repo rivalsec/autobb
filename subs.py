@@ -450,7 +450,7 @@ def passive_workflow(all_http_probes):
         nuclei_hits_new = list(nuclei_hits_new)
         nuclei_notify(
             nuclei_hits_new,
-            lambda x: f'{x["scope"]}: {x.get("url") or x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}',
+            lambda x: f'{x["scope"]}: {x.get("url") or x["host"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name") or ""} {x.get("extracted-results") or ""}',
             f"Passive scan at {glob.httprobes_savedir}:\n",
             source="nuclei_passive",
         )
@@ -635,7 +635,7 @@ def new_ports_workflow(port_items):
     nuclei_hits_new = db_get_modified(nuclei_hits, db['nuclei_hits'], index_fields, up_fields, compare.nuclei_hit)
     nuclei_hits_new = list(nuclei_hits_new)
     severity_sort(nuclei_hits_new)
-    notify_msg = "\n".join( [ f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name","")} {x.get("extracted-results","")}' for x in nuclei_hits_new ] )
+    notify_msg = "\n".join( [ f'{x["scope"]}: {x["matched-at"]} [{x["info"]["severity"]}] {x["template-id"]} {x.get("matcher-name") or ""} {x.get("extracted-results") or ""}' for x in nuclei_hits_new ] )
     alerter.notify(notify_msg, source="nuclei_network", items=nuclei_hits_new)
 
 

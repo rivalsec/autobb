@@ -26,7 +26,7 @@ RUN set -eux; \
     curl -sSL  "https://github.com/ffuf/ffuf/releases/download/v2.1.0/ffuf_2.1.0_${OS}_${ARCH}.tar.gz"                        | tar xz ffuf; \
     GLARCH="$([ "$ARCH" = "amd64" ] && echo x64 || echo "$ARCH")"; \
     curl -sSL  "https://github.com/gitleaks/gitleaks/releases/download/v8.23.2/gitleaks_8.23.2_linux_${GLARCH}.tar.gz"        | tar xz gitleaks; \
-    curl -sSL  "https://github.com/rivalsec/panuclei/releases/download/v0.1.0/panuclei_0.1.0_${OS}_${ARCH}.tar.gz"           | tar xz panuclei; \
+    curl -sSL  "https://github.com/rivalsec/panuclei/releases/download/v0.1.1/panuclei_0.1.1_${OS}_${ARCH}.tar.gz"           | tar xz panuclei; \
     rm -f *.zip; \
     chmod +x naabu subfinder httpx nuclei shuffledns dnsx puredns ffuf gitleaks panuclei
 
