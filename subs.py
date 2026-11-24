@@ -500,7 +500,8 @@ def asn_suggest_workflow():
     no scanning). Seeds from in-scope http_probes + domains carrying asn, finds
     likely org ASNs, expands them to CIDRs, and alerts ranges not already in
     scope. New suggestions are deduped via the asn_suggestions unique index so a
-    given range is suggested once.'''
+    given range is suggested once. All scopes share one batched alert — a
+    per-scope notify was too noisy.'''
     if not asn.available():
         logging.info("asn-suggest: no dataset loaded, skipping")
         return
@@ -514,6 +515,9 @@ def asn_suggest_workflow():
     # started at pipeline start (falls back to iptoasn prefixes if unavailable)
     asn.wait_pyasn_db()
 
+    # one batched alert for all scopes — a per-scope notify was too noisy
+    all_lines = []
+    total = 0
     for scope in scopes:
         q = {'scope': scope['name'], 'asn': {'$exists': True}, 'last_alive': {'$gte': since}}
         docs = []
@@ -529,8 +533,7 @@ def asn_suggest_workflow():
             continue
 
         existing = set(scope.get('cidr', []))
-        lines = []
-        new_count = 0
+        scope_lines = []
         for num, name, count in orgs:
             cidrs = asn.prefixes_for_asn(num)
             if len(cidrs) > max_prefixes:
@@ -547,21 +550,26 @@ def asn_suggest_workflow():
                 except DuplicateKeyError:
                     pass  # already suggested -> suppress re-alert
             if fresh:
-                new_count += len(fresh)
-                lines.append(f"AS{num} {name} — {count} assets, {len(cidrs)} range(s), {len(fresh)} new:")
-                lines.extend(f"  {c}" for c in fresh)
+                total += len(fresh)
+                scope_lines.append(f"AS{num} {name} — {count} assets, {len(cidrs)} range(s), {len(fresh)} new:")
+                scope_lines.extend(f"  {c}" for c in fresh)
 
-        if new_count:
-            msg = notify_block(
-                f"+{new_count} ASN netblock suggestion(s) ({scope['name']}). Add confirmed ranges to scope.cidr:",
-                lines)
-            alerter.notify(msg, source="asn_suggest")
+        if scope_lines:
+            all_lines.append(f"[{scope['name']}]")
+            all_lines.extend(scope_lines)
+
+    if total:
+        msg = notify_block(
+            f"+{total} ASN netblock suggestion(s). Add confirmed ranges to scope.cidr:",
+            all_lines)
+        alerter.notify(msg, source="asn_suggest")
 
 
 def apex_suggest_workflow():
     '''Suggest sibling apex domains from TLS SANs + CNAME/PTR already in Mongo
     (suggest-only). Corroboration-gated; new apexes deduped via the
-    scope_candidates unique index so each is suggested once.
+    scope_candidates unique index so each is suggested once. All scopes share
+    one batched alert — a per-scope notify was too noisy.
 
     Approving a candidate no longer means editing scope.domains by hand: set
     approval.status = "approved" on the doc (the autobbui Recon switch, or
@@ -570,12 +578,14 @@ def apex_suggest_workflow():
     Candidates already approved are no longer suggested at all, since
     scope_osint excludes everything in scope['domains'].'''
     cfg = config.get('scope_suggest') or {}
+    # one batched alert for all scopes — a per-scope notify was too noisy
+    all_lines = []
+    total = 0
     for scope in scopes:
         cands = scope_osint.candidates(db, scope, cfg)
         if not cands:
             continue
-        lines = []
-        new_count = 0
+        scope_lines = []
         for apex, sources in cands:
             ev = [f"{t}:{e}" for t, e in sources]
             types = sorted({t for t, _ in sources})
@@ -585,20 +595,24 @@ def apex_suggest_workflow():
                     'sources': types, 'evidence': ev,
                     'add_date': datetime.now(), 'last_seen': datetime.now(),
                 })
-                new_count += 1
-                lines.append(f"{apex} — {scope_osint.summarize_sources(sources)}")
+                total += 1
+                scope_lines.append(f"{apex} — {scope_osint.summarize_sources(sources)}")
             except DuplicateKeyError:
                 db['scope_candidates'].update_one(
                     {'scope': scope['name'], 'apex': apex},
                     {'$addToSet': {'sources': {'$each': types}, 'evidence': {'$each': ev}},
                      '$set': {'last_seen': datetime.now()}})
 
-        if new_count:
-            msg = notify_block(
-                f"+{new_count} apex suggestion(s) ({scope['name']}). "
-                f"Approve in autobbui (Recon -> Apex Candidates) to put one in scope:",
-                lines)
-            alerter.notify(msg, source="apex_suggest")
+        if scope_lines:
+            all_lines.append(f"[{scope['name']}]")
+            all_lines.extend(scope_lines)
+
+    if total:
+        msg = notify_block(
+            f"+{total} apex suggestion(s). "
+            f"Approve in autobbui (Recon -> Apex Candidates) to put one in scope:",
+            all_lines)
+        alerter.notify(msg, source="apex_suggest")
 
 
 def notify_ports(port_probes):
